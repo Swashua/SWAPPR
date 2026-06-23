@@ -6,6 +6,8 @@ let notebooks = [];
 let swapps = [];
 let editingNotebookId = null;
 let selectedSubject = null;
+let currentPage = 1;
+const ITEMS_PER_PAGE = 6;
 const subjects = [
   "Computer Science",
   "Information Technology",
@@ -73,7 +75,10 @@ function attachStaticEventListeners() {
   // Search input
   const searchInput = document.getElementById("searchInput");
   if (searchInput) {
-    searchInput.addEventListener("input", renderNotebooks);
+    searchInput.addEventListener("input", () => {
+      resetPagination();
+      renderNotebooks();
+    });
   }
 }
 
@@ -144,23 +149,112 @@ async function loadNotebooks() {
 function selectSubject(subject) {
   selectedSubject = subject;
   currentFilter = "all";
-  updateSectionTitle();
-  document.getElementById("backToSubjectsBtn")?.classList.remove("hidden");
-  renderNotebooks();
-}
-
-function resetSubjects() {
-  selectedSubject = null;
+  resetPagination();
   updateSectionTitle();
   document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
   renderNotebooks();
 }
 
+function resetSubjects() {
+  selectedSubject = null;
+  resetPagination();
+  updateSectionTitle();
+  document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
+  renderNotebooks();
+}
+
+function resetPagination() {
+  currentPage = 1;
+}
+
+function getPaginatedItems(items) {
+  const totalPages = Math.max(1, Math.ceil(items.length / ITEMS_PER_PAGE));
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  const start = (currentPage - 1) * ITEMS_PER_PAGE;
+  return items.slice(start, start + ITEMS_PER_PAGE);
+}
+
+function changePage(page) {
+  currentPage = page;
+  renderNotebooks();
+  document
+    .getElementById("sectionTitle")
+    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderPagination(totalItems) {
+  const pagination = document.getElementById("paginationControls");
+  if (!pagination) return;
+
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+  if (totalPages <= 1) {
+    pagination.innerHTML = "";
+    pagination.classList.add("hidden");
+    return;
+  }
+
+  pagination.classList.remove("hidden");
+
+  const pageButtons = Array.from({ length: totalPages }, (_, index) => {
+    const page = index + 1;
+    return `
+      <button
+        type="button"
+        class="pagination-page ${page === currentPage ? "active" : ""}"
+        data-page="${page}"
+        aria-label="Go to page ${page}"
+        ${page === currentPage ? 'aria-current="page"' : ""}
+      >
+        ${page}
+      </button>
+    `;
+  }).join("");
+
+  pagination.innerHTML = `
+    <div class="pagination-summary">
+      Page ${currentPage} of ${totalPages}
+    </div>
+    <div class="pagination-actions">
+      <button
+        type="button"
+        class="pagination-btn"
+        data-page="${currentPage - 1}"
+        ${currentPage === 1 ? "disabled" : ""}
+      >
+        Previous
+      </button>
+      <div class="pagination-pages">${pageButtons}</div>
+      <button
+        type="button"
+        class="pagination-btn"
+        data-page="${currentPage + 1}"
+        ${currentPage === totalPages ? "disabled" : ""}
+      >
+        Next
+      </button>
+    </div>
+  `;
+
+  pagination.querySelectorAll("[data-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const page = Number(button.dataset.page);
+      if (!button.disabled && page >= 1 && page <= totalPages) {
+        changePage(page);
+      }
+    });
+  });
+}
+
 function updateSectionTitle() {
   const sectionTitle = document.getElementById("sectionTitle");
+  const sectionSubtitle = document.getElementById("sectionSubtitle");
   if (!sectionTitle) return;
   if (selectedSubject) {
-    sectionTitle.textContent = selectedSubject;
+    sectionTitle.textContent = "All Notebooks";
+    if (sectionSubtitle) {
+      sectionSubtitle.textContent = "Discover and exchange study materials";
+    }
     return;
   }
 
@@ -174,6 +268,10 @@ function updateSectionTitle() {
   };
 
   sectionTitle.textContent = titles[currentFilter] || "Subjects";
+  if (sectionSubtitle) {
+    sectionSubtitle.textContent =
+      "Browse shared subjects and study resources in a Reddit-style feed.";
+  }
 }
 
 function renderSubjectCards() {
@@ -186,10 +284,18 @@ function renderSubjectCards() {
   if (sectionTitle) {
     sectionTitle.textContent = "Subjects";
   }
+  const sectionSubtitle = document.getElementById("sectionSubtitle");
+  if (sectionSubtitle) {
+    sectionSubtitle.textContent =
+      "Browse shared subjects and study resources in a Reddit-style feed.";
+  }
 
   document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
 
-  subjects.forEach((subject) => {
+  const visibleSubjects = getPaginatedItems(subjects);
+  renderPagination(subjects.length);
+
+  visibleSubjects.forEach((subject) => {
     const card = document.createElement("div");
     card.className = "subject-card fade-in";
     card.innerHTML = `
@@ -263,6 +369,7 @@ function renderNotebooks() {
 
   if (currentFilter === "requests") {
     grid.innerHTML = renderRequests();
+    renderPagination(0);
     attachRequestListeners();
     return;
   }
@@ -293,12 +400,15 @@ function renderNotebooks() {
 
   if (filtered.length === 0) {
     grid.innerHTML = `<p class="text-sm text-purple-400">No results found.</p>`;
+    renderPagination(0);
     return;
   }
 
-  grid.className = "subjects-list";
+  grid.className = selectedSubject ? "notebooks-grid" : "subjects-list";
+  const visibleNotebooks = getPaginatedItems(filtered);
+  renderPagination(filtered.length);
 
-  filtered.forEach((n) => {
+  visibleNotebooks.forEach((n) => {
     const card = document.createElement("div");
     card.className = "post-card fade-in";
 
@@ -350,7 +460,7 @@ function renderNotebooks() {
       </div>
 
       <div class="card-subject-row">
-        <span class="card-subject-text">${subjectLabel} • COURSE • Reviewer</span>
+        <span class="card-subject-text">${subjectLabel} &bull; COURSE &bull; Reviewer</span>
       </div>
 
       <div class="card-badge-row">
@@ -373,7 +483,10 @@ function renderNotebooks() {
       </div>
 
       <div class="meta-bottom-row">
-        <div class="read-time">${n.readTime || 48} min read</div>
+        <div class="read-time">
+          <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+          ${n.readTime || 48} min read
+        </div>
         <div class="trust-score">
           <i data-lucide="shield-check" class="w-4 h-4"></i>
           ${trustScore}% Trust Score
@@ -381,7 +494,7 @@ function renderNotebooks() {
       </div>
 
       <div class="card-footer">
-        <span class="footer-text">PREVIEW • UNLOCK VIA SWAP</span>
+        <span class="footer-text">PREVIEW &bull; UNLOCK VIA SWAP</span>
         <div class="action-container"></div>
       </div>
     `;
@@ -398,7 +511,7 @@ function renderNotebooks() {
     } else if (hasSwapp) {
       // Already swapped - show access
       const accessBtn = document.createElement("button");
-      accessBtn.textContent = "🔓 Access";
+      accessBtn.innerHTML = '<i data-lucide="unlock" class="w-4 h-4"></i> Access';
       accessBtn.className =
         "text-sm px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold transition shadow-sm";
       accessBtn.addEventListener("click", () => {
@@ -412,7 +525,7 @@ function renderNotebooks() {
     } else if (canSwapp) {
       // Can initiate swap
       const swapBtn = document.createElement("button");
-      swapBtn.textContent = "⇄ Request Swap";
+      swapBtn.innerHTML = '<i data-lucide="repeat-2" class="w-4 h-4"></i> Request Swap';
       swapBtn.className =
         "text-sm px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition shadow-sm";
       swapBtn.addEventListener("click", async () => {
@@ -429,7 +542,8 @@ function renderNotebooks() {
           console.error(err);
         } finally {
           swapBtn.disabled = false;
-          swapBtn.textContent = "⇄ Request Swap";
+          swapBtn.innerHTML = '<i data-lucide="repeat-2" class="w-4 h-4"></i> Request Swap';
+          lucide.createIcons();
         }
       });
       actionContainer.appendChild(swapBtn);
@@ -600,6 +714,9 @@ async function loadRecent() {
 // ─── FILTER ─────────────────────────────────────────────
 function filterBy(type) {
   currentFilter = type;
+  selectedSubject = null;
+  resetPagination();
+  document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
 
   const titles = {
     all: "All Subjects",
