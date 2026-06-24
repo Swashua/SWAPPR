@@ -5,28 +5,16 @@ let currentFilter = "all";
 let notebooks = [];
 let swapps = [];
 let editingNotebookId = null;
-let selectedSubject = null;
+let selectedDepartment = null;
 let currentPage = 1;
 const ITEMS_PER_PAGE = 6;
-const subjects = [
-  "Computer Science",
-  "Information Technology",
-  "Electrical Engineering",
-  "Mechanical Engineering",
-  "Civil Engineering",
-  "Psychology",
-  "Economics",
-  "Biology",
-  "Nursing",
-  "Pharmacy",
-  "Political Science",
-  "Mathematics",
-];
+let departments = [];
 
 // ─── INIT ───────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   // FIX: use sessionStorage (consistent with login.html)
   loadUser();
+  loadDepartments();
   loadNotebooks();
   loadSwapps();
   loadSidebar();
@@ -124,6 +112,29 @@ function toggleChat() {
   }
 }
 
+// ─── DEPARTMENTS ────────────────────────────────────────
+async function loadDepartments() {
+  try {
+    const res = await fetch(`${API}/departments`);
+    const data = await res.json();
+    departments = data.departments || [];
+    populateDeptDropdown();
+    renderNotebooks();
+  } catch (err) {
+    console.error("Failed to load departments:", err);
+  }
+}
+
+function populateDeptDropdown() {
+  const select = document.getElementById("newDept");
+  if (!select) return;
+  select.innerHTML =
+    `<option value="">— Select department —</option>` +
+    departments
+      .map((d) => `<option value="${d}">${d}</option>`)
+      .join("");
+}
+
 // ─── NOTEBOOKS ──────────────────────────────────────────
 async function loadNotebooks() {
   try {
@@ -146,8 +157,8 @@ async function loadNotebooks() {
   }
 }
 
-function selectSubject(subject) {
-  selectedSubject = subject;
+function selectDepartment(department) {
+  selectedDepartment = department;
   currentFilter = "all";
   resetPagination();
   updateSectionTitle();
@@ -155,8 +166,8 @@ function selectSubject(subject) {
   renderNotebooks();
 }
 
-function resetSubjects() {
-  selectedSubject = null;
+function resetDepartments() {
+  selectedDepartment = null;
   resetPagination();
   updateSectionTitle();
   document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
@@ -250,7 +261,7 @@ function updateSectionTitle() {
   const sectionTitle = document.getElementById("sectionTitle");
   const sectionSubtitle = document.getElementById("sectionSubtitle");
   if (!sectionTitle) return;
-  if (selectedSubject) {
+  if (selectedDepartment) {
     sectionTitle.textContent = "All Notebooks";
     if (sectionSubtitle) {
       sectionSubtitle.textContent = "Discover and exchange study materials";
@@ -260,10 +271,10 @@ function updateSectionTitle() {
 
   const titles = {
     all: "All Subjects",
-    mine: "My Subjects",
+    mine: "My Departments",
     matched: "SWAPP Matches",
     requests: "Requests",
-    top: "Top Subjects",
+    top: "Top Departments",
     recent: "Recently Added",
   };
 
@@ -274,7 +285,7 @@ function updateSectionTitle() {
   }
 }
 
-function renderSubjectCards() {
+function renderDepartmentCards() {
   const grid = document.getElementById("notebookGrid");
   if (!grid) return;
   grid.innerHTML = "";
@@ -292,28 +303,28 @@ function renderSubjectCards() {
 
   document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
 
-  const visibleSubjects = getPaginatedItems(subjects);
-  renderPagination(subjects.length);
+  const visibleDepartments = getPaginatedItems(departments);
+  renderPagination(departments.length);
 
-  visibleSubjects.forEach((subject) => {
+  visibleDepartments.forEach((department) => {
     const card = document.createElement("div");
     card.className = "subject-card fade-in";
     card.innerHTML = `
       <div class="subject-card-inner">
         <div>
-          <h3 class="subject-title">${subject}</h3>
+          <h3 class="subject-title">${department}</h3>
           <p class="subject-desc">
-            Explore notebooks shared by users for ${subject}.
+            Explore notebooks shared by users for ${department}.
           </p>
         </div>
-        <button class="subject-cta" data-subject="${subject}">
+        <button class="subject-cta" data-department="${department}">
           View Swaps
         </button>
       </div>
     `;
 
     card.querySelector("button")?.addEventListener("click", () => {
-      selectSubject(subject);
+      selectDepartment(department);
     });
 
     grid.appendChild(card);
@@ -327,8 +338,8 @@ function renderNotebooks() {
   const searchQuery =
     document.getElementById("searchInput")?.value?.toLowerCase() || "";
 
-  if (!selectedSubject && currentFilter === "all" && !searchQuery) {
-    renderSubjectCards();
+  if (!selectedDepartment && currentFilter === "all" && !searchQuery) {
+    renderDepartmentCards();
     return;
   }
 
@@ -346,13 +357,8 @@ function renderNotebooks() {
     );
   }
 
-  if (selectedSubject) {
-    const subjectFilter = selectedSubject.toLowerCase();
-    filtered = filtered.filter((n) => {
-      const dept = (n.department || "").toLowerCase();
-      const course = (n.course || "").toLowerCase();
-      return dept.includes(subjectFilter) || course.includes(subjectFilter);
-    });
+  if (selectedDepartment) {
+    filtered = filtered.filter((n) => n.department === selectedDepartment);
   }
 
   // 📂 FILTERS
@@ -404,7 +410,7 @@ function renderNotebooks() {
     return;
   }
 
-  grid.className = selectedSubject ? "notebooks-grid" : "subjects-list";
+  grid.className = selectedDepartment ? "notebooks-grid" : "subjects-list";
   const visibleNotebooks = getPaginatedItems(filtered);
   renderPagination(filtered.length);
 
@@ -714,16 +720,16 @@ async function loadRecent() {
 // ─── FILTER ─────────────────────────────────────────────
 function filterBy(type) {
   currentFilter = type;
-  selectedSubject = null;
+  selectedDepartment = null;
   resetPagination();
   document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
 
   const titles = {
     all: "All Subjects",
-    mine: "My Subjects",
+    mine: "My Departments",
     matched: "SWAPP Matches",
     requests: "Requests",
-    top: "Top Subjects",
+    top: "Top Departments",
     recent: "Recently Added",
   };
 
@@ -926,23 +932,23 @@ function openAddModal() {
   document.getElementById("modalHeading").textContent = "New Notebook";
   clearPortfolioForm();
 
-  if (selectedSubject) {
+  if (selectedDepartment) {
     const deptInput = document.getElementById("newDept");
     if (deptInput) {
       const existingOption = Array.from(deptInput.options).find(
         (option) =>
-          option.value.toLowerCase() === selectedSubject.toLowerCase() ||
-          option.text.toLowerCase().includes(selectedSubject.toLowerCase()),
+          option.value.toLowerCase() === selectedDepartment.toLowerCase() ||
+          option.text.toLowerCase().includes(selectedDepartment.toLowerCase()),
       );
 
       if (existingOption) {
         deptInput.value = existingOption.value;
       } else {
         const customOption = document.createElement("option");
-        customOption.value = selectedSubject;
-        customOption.text = selectedSubject;
+        customOption.value = selectedDepartment;
+        customOption.text = selectedDepartment;
         deptInput.appendChild(customOption);
-        deptInput.value = selectedSubject;
+        deptInput.value = selectedDepartment;
       }
     }
   }

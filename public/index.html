@@ -167,7 +167,7 @@
               class="sidebar-link flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition"
             >
               <i data-lucide="notebook" class="w-4 h-4"></i>
-              My Subjects
+              My Departments
             </a>
             <a
               href="#"
@@ -210,7 +210,7 @@
               class="sidebar-link flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition"
             >
               <i data-lucide="trophy" class="w-4 h-4"></i>
-              Top Subjects
+              Top Departments
             </a>
 
             <a
@@ -270,10 +270,10 @@
             <div>
               <button
                 id="backToSubjectsBtn"
-                onclick="resetSubjects()"
+                onclick="resetDepartments()"
                 class="hidden text-sm font-semibold px-4 py-2 rounded-full bg-white/90 text-purple-700 hover:bg-white transition"
               >
-                ← Back to Subjects
+                ← Back to Departments
               </button>
             </div>
 
@@ -445,62 +445,8 @@
           <div>
             <label class="field-section-label">Department / Subject</label>
             <select id="newDept" class="input-field">
+              <!-- Options populated dynamically by populateDeptDropdown() from /api/departments -->
               <option value="">— Select department —</option>
-              <option value="BS Computer Science">BS Computer Science</option>
-              <option value="BS Information Technology">
-                BS Information Technology
-              </option>
-              <option value="BS Computer Engineering">
-                BS Computer Engineering
-              </option>
-              <option value="BS Electrical Engineering">
-                BS Electrical Engineering
-              </option>
-              <option value="BS Electronics Engineering">
-                BS Electronics Engineering
-              </option>
-              <option value="BS Civil Engineering">BS Civil Engineering</option>
-              <option value="BS Mechanical Engineering">
-                BS Mechanical Engineering
-              </option>
-              <option value="BS Industrial Engineering">
-                BS Industrial Engineering
-              </option>
-              <option value="BS Chemical Engineering">
-                BS Chemical Engineering
-              </option>
-              <option value="BS Nursing">BS Nursing</option>
-              <option value="BS Pharmacy">BS Pharmacy</option>
-              <option value="BS Psychology">BS Psychology</option>
-              <option value="BS Business Administration">
-                BS Business Administration
-              </option>
-              <option value="BS Accountancy">BS Accountancy</option>
-              <option value="BS Economics">BS Economics</option>
-              <option value="BS Mathematics">BS Mathematics</option>
-              <option value="BS Physics">BS Physics</option>
-              <option value="BS Chemistry">BS Chemistry</option>
-              <option value="BS Communication">BS Communication</option>
-              <option value="BS Fine Arts">BS Fine Arts</option>
-              <option value="BS Hospitality Management">
-                BS Hospitality Management
-              </option>
-              <option value="BS Nutrition and Dietetics">
-                BS Nutrition and Dietetics
-              </option>
-              <option value="BS Political Science">BS Political Science</option>
-              <option value="AB Anthropology">AB Anthropology</option>
-              <option value="AB History">AB History</option>
-              <option value="AB Literature">AB Literature</option>
-              <option value="AB Philosophy">AB Philosophy</option>
-              <option value="AB Sociology">AB Sociology</option>
-              <option value="JD Law">JD Law</option>
-              <option value="Bachelor of Secondary Education">
-                Bachelor of Secondary Education
-              </option>
-              <option value="Bachelor of Elementary Education">
-                Bachelor of Elementary Education
-              </option>
             </select>
           </div>
           <div>
