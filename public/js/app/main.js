@@ -11,6 +11,10 @@
         app.renderNotebooks();
       });
     }
+
+    document
+      .getElementById("backToSubjectsBtn")
+      ?.addEventListener("click", () => app.clearSelectedSubject());
   }
 
   function exposeCompatibilityGlobals() {

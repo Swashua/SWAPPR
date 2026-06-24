@@ -10,6 +10,14 @@
     const sectionSubtitle = document.getElementById("sectionSubtitle");
     if (!sectionTitle) return;
 
+    if (app.state.selectedSubject) {
+      sectionTitle.textContent = app.state.selectedSubject;
+      if (sectionSubtitle) {
+        sectionSubtitle.textContent = "Notebooks for this subject";
+      }
+      return;
+    }
+
     if (app.state.selectedDepartment) {
       sectionTitle.textContent = "All Notebooks";
       if (sectionSubtitle) {
@@ -54,6 +62,18 @@
     if (app.state.selectedDepartment) {
       filtered = filtered.filter(
         (notebook) => notebook.department === app.state.selectedDepartment,
+      );
+    }
+
+    if (app.state.selectedSubject) {
+      const want = app.state.selectedSubject;
+      const dept = app.state.selectedSubjectDept;
+      // Exact course_code match, OR legacy untagged notebook whose department
+      // matches the subject's department (the "backfill from department" path).
+      filtered = filtered.filter(
+        (notebook) =>
+          notebook.course_code === want ||
+          (!notebook.course_code && dept && notebook.department === dept),
       );
     }
 
@@ -270,6 +290,7 @@
     const searchQuery = currentSearchQuery();
     if (
       !app.state.selectedDepartment &&
+      !app.state.selectedSubject &&
       app.state.currentFilter === "all" &&
       !searchQuery
     ) {
@@ -295,7 +316,10 @@
       return;
     }
 
-    grid.className = app.state.selectedDepartment ? "notebooks-grid" : "subjects-list";
+    grid.className =
+      app.state.selectedDepartment || app.state.selectedSubject
+        ? "notebooks-grid"
+        : "subjects-list";
     const visibleNotebooks = app.getPaginatedItems(filtered);
     app.renderPagination(filtered.length);
 
@@ -309,7 +333,12 @@
   app.submitPortfolio = async function submitPortfolio() {
     const title = document.getElementById("newTitle").value;
     const description = document.getElementById("newDescription").value;
-    const department = document.getElementById("newDept").value;
+    const subjectSelect = document.getElementById("newSubject");
+    const courseCode = subjectSelect?.value || "";
+    // Derive department from the chosen subject so the legacy dept-fallback and
+    // existing department filter keep working.
+    const department =
+      subjectSelect?.selectedOptions?.[0]?.dataset?.department || "";
     const fileUrl = document.getElementById("newFileUrl").value;
     const editingNotebookId = app.state.editingNotebookId;
 
@@ -320,6 +349,7 @@
         title,
         description,
         department,
+        courseCode,
         fileUrl,
         username: app.state.currentUser.username,
       };
@@ -357,6 +387,8 @@
   app.filterBy = function filterBy(type) {
     app.state.currentFilter = type;
     app.state.selectedDepartment = null;
+    app.state.selectedSubject = null;
+    app.state.selectedSubjectDept = null;
     app.resetPagination();
     document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
 

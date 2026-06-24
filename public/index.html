@@ -207,6 +207,13 @@
             class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4"
           >
             <div>
+              <button
+                id="backToSubjectsBtn"
+                type="button"
+                class="hidden mb-2 text-sm font-semibold text-purple-600 dark:text-purple-300 hover:text-purple-800 dark:hover:text-purple-100 transition"
+              >
+                ← Back to subjects
+              </button>
               <h2
                 id="sectionTitle"
                 class="text-3xl font-extrabold text-gray-800 dark:text-purple-100"
@@ -387,10 +394,10 @@
             ></textarea>
           </div>
           <div>
-            <label class="field-section-label">Department / Subject</label>
-            <select id="newDept" class="input-field">
-              <!-- Options populated dynamically by populateDeptDropdown() from /api/departments -->
-              <option value="">— Select department —</option>
+            <label class="field-section-label">Subject</label>
+            <select id="newSubject" class="input-field">
+              <!-- Options populated dynamically by populateSubjectDropdown() from /api/subjects -->
+              <option value="">— Select subject —</option>
             </select>
           </div>
           <div>
