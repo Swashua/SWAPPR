@@ -151,7 +151,12 @@ app.post("/api/login", (req, res) => {
     // 4. Success!
     res.json({
       success: true,
-      user: { id: user.id, username: user.username, name: user.name },
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        course: user.course || "",
+      },
     });
   });
 });
