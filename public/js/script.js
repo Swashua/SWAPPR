@@ -11,6 +11,15 @@ const ITEMS_PER_PAGE = 6;
 let departments = [];
 let subjects = [];
 
+const titles = {
+  all: "All Subjects",
+  mine: "My Subjects",
+  matched: "SWAPP Matches",
+  requests: "Requests",
+  top: "Top Departments",
+  recent: "Recently Added",
+};
+
 // ─── INIT ───────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   // FIX: use sessionStorage (consistent with login.html)
@@ -119,7 +128,7 @@ async function loadSubjects() {
   try {
     const course = currentUser?.course || "";
     const res = await fetch(
-      `${API}/subjects?course=${encodeURIComponent(course)}`
+      `${API}/subjects?course=${encodeURIComponent(course)}`,
     );
     const data = await res.json();
     subjects = data.subjects || [];
@@ -135,9 +144,7 @@ function populateDeptDropdown() {
   if (!select) return;
   select.innerHTML =
     `<option value="">— Select department —</option>` +
-    departments
-      .map((d) => `<option value="${d}">${d}</option>`)
-      .join("");
+    departments.map((d) => `<option value="${d}">${d}</option>`).join("");
 }
 
 // ─── NOTEBOOKS ──────────────────────────────────────────
@@ -195,9 +202,14 @@ function renderPagination(totalItems) {
 
   pagination.classList.remove("hidden");
 
-  const pageButtons = Array.from({ length: totalPages }, (_, index) => {
-    const page = index + 1;
-    return `
+  const pageButtons = SWAPPRPagination.paginationItems(currentPage, totalPages)
+    .map((item) => {
+      if (item === "ellipsis") {
+        return `<span class="pagination-ellipsis" aria-hidden="true">...</span>`;
+      }
+
+      const page = item;
+      return `
       <button
         type="button"
         class="pagination-page ${page === currentPage ? "active" : ""}"
@@ -208,7 +220,8 @@ function renderPagination(totalItems) {
         ${page}
       </button>
     `;
-  }).join("");
+    })
+    .join("");
 
   pagination.innerHTML = `
     <div class="pagination-summary">
@@ -256,15 +269,6 @@ function updateSectionTitle() {
     }
     return;
   }
-
-  const titles = {
-    all: "All Subjects",
-    mine: "My Departments",
-    matched: "SWAPP Matches",
-    requests: "Requests",
-    top: "Top Departments",
-    recent: "Recently Added",
-  };
 
   sectionTitle.textContent = titles[currentFilter] || "Subjects";
   if (sectionSubtitle) {
@@ -430,10 +434,10 @@ function renderNotebooks() {
       (wordCount > 15000
         ? "COMPREHENSIVE"
         : wordCount > 8000
-        ? "COMPREHENSIVE"
-        : wordCount > 4000
-        ? "STANDARD"
-        : "QUICK REVIEW");
+          ? "COMPREHENSIVE"
+          : wordCount > 4000
+            ? "STANDARD"
+            : "QUICK REVIEW");
 
     card.className = "notebook-card fade-in";
     card.innerHTML = `
@@ -497,7 +501,8 @@ function renderNotebooks() {
     } else if (hasSwapp) {
       // Already swapped - show access
       const accessBtn = document.createElement("button");
-      accessBtn.innerHTML = '<i data-lucide="unlock" class="w-4 h-4"></i> Access';
+      accessBtn.innerHTML =
+        '<i data-lucide="unlock" class="w-4 h-4"></i> Access';
       accessBtn.className =
         "text-sm px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold transition shadow-sm";
       accessBtn.addEventListener("click", () => {
@@ -511,7 +516,8 @@ function renderNotebooks() {
     } else if (canSwapp) {
       // Can initiate swap
       const swapBtn = document.createElement("button");
-      swapBtn.innerHTML = '<i data-lucide="repeat-2" class="w-4 h-4"></i> Request Swap';
+      swapBtn.innerHTML =
+        '<i data-lucide="repeat-2" class="w-4 h-4"></i> Request Swap';
       swapBtn.className =
         "text-sm px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition shadow-sm";
       swapBtn.addEventListener("click", async () => {
@@ -528,7 +534,8 @@ function renderNotebooks() {
           console.error(err);
         } finally {
           swapBtn.disabled = false;
-          swapBtn.innerHTML = '<i data-lucide="repeat-2" class="w-4 h-4"></i> Request Swap';
+          swapBtn.innerHTML =
+            '<i data-lucide="repeat-2" class="w-4 h-4"></i> Request Swap';
           lucide.createIcons();
         }
       });
@@ -703,15 +710,6 @@ function filterBy(type) {
   selectedDepartment = null;
   resetPagination();
   document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
-
-  const titles = {
-    all: "All Subjects",
-    mine: "My Departments",
-    matched: "SWAPP Matches",
-    requests: "Requests",
-    top: "Top Departments",
-    recent: "Recently Added",
-  };
 
   const sectionTitle = document.getElementById("sectionTitle");
   if (sectionTitle) sectionTitle.textContent = titles[type] || "Notebooks";
