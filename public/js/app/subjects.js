@@ -5,7 +5,6 @@
     try {
       const data = await app.api.getDepartments();
       app.state.departments = data.departments || [];
-      app.populateDeptDropdown();
       app.renderNotebooks();
     } catch (err) {
       console.error("Failed to load departments:", err);
@@ -17,6 +16,7 @@
       const course = app.state.currentUser?.course || "";
       const data = await app.api.getSubjects(course);
       app.state.subjects = data.subjects || [];
+      app.populateSubjectDropdown();
       app.renderNotebooks();
     } catch (err) {
       console.error("Failed to load subjects:", err);
@@ -24,15 +24,36 @@
     }
   };
 
-  app.populateDeptDropdown = function populateDeptDropdown() {
-    const select = document.getElementById("newDept");
+  // Upload-form picker: tag a notebook with one of the user's program subjects.
+  app.populateSubjectDropdown = function populateSubjectDropdown() {
+    const select = document.getElementById("newSubject");
     if (!select) return;
 
     select.innerHTML =
-      `<option value="">- Select department -</option>` +
-      app.state.departments
-        .map((department) => `<option value="${department}">${department}</option>`)
+      `<option value="">- Select subject -</option>` +
+      app.state.subjects
+        .map(
+          (subject) =>
+            `<option value="${subject.code}" data-department="${subject.department || ""}">${subject.code} - ${subject.description || ""}</option>`,
+        )
         .join("");
+  };
+
+  // Drill from a subject card into its aligned notebooks.
+  app.selectSubject = function selectSubject(code, department) {
+    app.state.selectedSubject = code;
+    app.state.selectedSubjectDept = department || "";
+    app.resetPagination();
+    document.getElementById("backToSubjectsBtn")?.classList.remove("hidden");
+    app.renderNotebooks();
+  };
+
+  app.clearSelectedSubject = function clearSelectedSubject() {
+    app.state.selectedSubject = null;
+    app.state.selectedSubjectDept = null;
+    app.resetPagination();
+    document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
+    app.renderNotebooks();
   };
 
   app.renderSubjectCards = function renderSubjectCards() {
@@ -69,8 +90,14 @@
             <h3 class="subject-title">${subject.code}</h3>
             <p class="subject-desc">${subject.description || ""}</p>
           </div>
+          <button class="subject-cta" type="button">View Swaps</button>
         </div>
       `;
+      card
+        .querySelector(".subject-cta")
+        .addEventListener("click", () =>
+          app.selectSubject(subject.code, subject.department || ""),
+        );
       grid.appendChild(card);
     });
   };

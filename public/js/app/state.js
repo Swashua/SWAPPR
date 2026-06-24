@@ -9,6 +9,8 @@
     swapps: [],
     editingNotebookId: null,
     selectedDepartment: null,
+    selectedSubject: null, // course_code currently drilled into via View Swaps
+    selectedSubjectDept: null, // its department, for the legacy untagged fallback
     currentPage: 1,
     itemsPerPage: 6,
     departments: [],

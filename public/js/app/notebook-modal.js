@@ -4,13 +4,13 @@
   app.clearPortfolioForm = function clearPortfolioForm() {
     const titleInput = document.getElementById("newTitle");
     const descriptionInput = document.getElementById("newDescription");
-    const deptInput = document.getElementById("newDept");
+    const subjectInput = document.getElementById("newSubject");
     const fileUrlInput = document.getElementById("newFileUrl");
     const actionBtn = document.getElementById("portfolioActionBtn");
 
     if (titleInput) titleInput.value = "";
     if (descriptionInput) descriptionInput.value = "";
-    if (deptInput) deptInput.value = "";
+    if (subjectInput) subjectInput.value = "";
     if (fileUrlInput) fileUrlInput.value = "";
     if (actionBtn) actionBtn.textContent = "Publish Notebook";
   };
@@ -20,34 +20,35 @@
     document.getElementById("modalHeading").textContent = "New Notebook";
     app.clearPortfolioForm();
 
-    if (app.state.selectedDepartment) {
-      selectDepartment(app.state.selectedDepartment);
+    // Pre-select the subject the user drilled into, if any.
+    if (app.state.selectedSubject) {
+      selectSubject(app.state.selectedSubject);
     }
 
     document.getElementById("addModal").classList.remove("hidden");
     setTimeout(() => root.lucide?.createIcons(), 100);
   };
 
-  function selectDepartment(selectedDepartment) {
-    const deptInput = document.getElementById("newDept");
-    if (!deptInput) return;
+  // Form-prefill helper: set the upload form's subject select to `code`,
+  // adding an option if the code isn't already in the list.
+  function selectSubject(code) {
+    const subjectInput = document.getElementById("newSubject");
+    if (!subjectInput || !code) return;
 
-    const existingOption = Array.from(deptInput.options).find(
-      (option) =>
-        option.value.toLowerCase() === selectedDepartment.toLowerCase() ||
-        option.text.toLowerCase().includes(selectedDepartment.toLowerCase()),
+    const existingOption = Array.from(subjectInput.options).find(
+      (option) => option.value === code,
     );
 
     if (existingOption) {
-      deptInput.value = existingOption.value;
+      subjectInput.value = code;
       return;
     }
 
     const customOption = document.createElement("option");
-    customOption.value = selectedDepartment;
-    customOption.text = selectedDepartment;
-    deptInput.appendChild(customOption);
-    deptInput.value = selectedDepartment;
+    customOption.value = code;
+    customOption.text = code;
+    subjectInput.appendChild(customOption);
+    subjectInput.value = code;
   }
 
   app.openEditNotebookModal = function openEditNotebookModal(notebook) {
@@ -55,7 +56,7 @@
     document.getElementById("modalHeading").textContent = "Edit Notebook";
     document.getElementById("newTitle").value = notebook.title || "";
     document.getElementById("newDescription").value = notebook.description || "";
-    document.getElementById("newDept").value = notebook.department || "";
+    selectSubject(notebook.course_code || "");
     document.getElementById("newFileUrl").value = notebook.file_url || "";
 
     const actionBtn = document.getElementById("portfolioActionBtn");
