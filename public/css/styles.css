@@ -658,11 +658,18 @@ body {
 }
 
 .pagination {
+  /* Pinned to the bottom of <main> so it holds its place even when the
+     current page renders only a couple of cards. <main> is position:relative
+     with pb-24 reserving space so content never sits under the bar. */
+  position: absolute;
+  left: 2rem;
+  right: 2rem;
+  bottom: 2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin: 1.5rem 0 0;
+  margin: 0;
   padding: 1rem;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.78);
@@ -933,6 +940,9 @@ body {
   .pagination {
     align-items: stretch;
     flex-direction: column;
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
   }
 
   .pagination-actions {
