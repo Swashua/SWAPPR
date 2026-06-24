@@ -19,6 +19,18 @@
 - Frontend has no test framework; frontend tasks use manual verification steps (run the server, open the page).
 - Commit after each task. Conventional Commit messages.
 - The prefix map in Task 1 is a **best-effort draft**; entries flagged `// REVIEW:` are the author's uncertain assignments. Transcribe them verbatim — the human owner reviews them separately. Do not "fix" or drop REVIEW entries.
+- **Demo data caveat — read before any frontend verification.** `seed.js`
+  seeds users with **short** course names (`"BS Computer Science"`). The
+  `courseMap` keys are the **full** names (`"Bachelor of Science in Computer
+  Science"`). So `subjectPrefixesFor("BS Computer Science")` → `[]` → the
+  all-subjects fallback fires and the feed shows **every** subject (~2465),
+  *not* a filtered list. This is expected given the stale demo data; re-seeding
+  is out of scope. **To verify real filtering you MUST register a fresh user**
+  (the registration dropdown stores the full program name). Logging in as a
+  seed user only exercises the fallback path.
+- **Stale-session caveat.** A user whose `currentUser` was written to
+  `sessionStorage` *before* Task 4 shipped has no `course` field → fallback
+  until they log out and back in. Self-heals on next login; no code needed.
 
 ---
 
@@ -493,7 +505,11 @@ Start the server (`node server.js`). The seed users use short course names, but 
 curl -s -X POST http://localhost:3000/api/login -H "Content-Type: application/json" -d "{\"username\":\"ana_reyes\",\"password\":\"pass1234\"}"
 ```
 
-Expected: JSON where `user` contains a `course` key (value may be a short demo name like `"BS Computer Science"` — that's fine; real registrations store the full name). Stop the server.
+Expected: JSON where `user` contains a `course` key. This step only checks the
+field is **present** — the value may be a short demo name like `"BS Computer
+Science"`. That short name will NOT match `courseMap` and falls back to
+all-subjects downstream (see the demo-data caveat in Global Constraints); real
+filtering is verified in Task 5 with a freshly registered user. Stop the server.
 
 - [ ] **Step 3: Commit**
 
@@ -641,11 +657,15 @@ Delete this entire `<button>` element. (Its handler `resetDepartments` is being 
 
 - [ ] **Step 6: Manual verification**
 
-Run `node server.js`, open `http://localhost:3000`, log in as an existing user (or register a new one — registration stores the full program name, which gives the best results).
+Run `node server.js`, open `http://localhost:3000`. **Register a brand-new
+user** and pick **"Bachelor of Science in Computer Science"** in the program
+dropdown. Do NOT verify with a seed user — seed users have short course names
+that hit the all-subjects fallback (see Global Constraints) and would mask a
+broken filter.
 
 Expected:
 - The "All Subjects" feed shows **subject cards** (course code + description), not department names.
-- For a Computer Science registration: cards include `CIS`- and `CS`-prefixed subjects, none `IT`/`IS`.
+- For the Computer Science registration: cards include `CIS`- and `CS`-prefixed subjects, and **none** prefixed `IT`/`IS`. (If you instead see thousands of mixed-prefix subjects, the program name didn't match `courseMap` and the fallback fired — recheck the registered course value.)
 - Pagination still works. No console errors. The "Add notebook" form's department dropdown still populates.
 
 - [ ] **Step 7: Commit**
