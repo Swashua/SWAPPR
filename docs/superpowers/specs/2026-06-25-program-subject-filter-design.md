@@ -95,7 +95,11 @@ Prefixes-grouped-by-department is already dumped (see commit notes). For each
 department I classify every prefix as program-own / dept-shared / grad / noise
 and attach to the right `course_map` entry; **user reviews and corrects** the
 draft before it lands. Grad-only and noise prefixes are simply left
-unassigned (those subjects won't show for undergrad programs — acceptable).
+unassigned. Grad prefixes (`MIT`, `MSIT`, `DIT`, `PHDIT`, …) are deliberately
+ignored: `course_mapper.js` and the registration dropdown contain only
+Bachelor/Diploma programs, so no registerable program maps to them and
+`/api/subjects` is never queried with one. Building grad prefix sets would be
+dead code until grad programs become registerable.
 
 ## Server — `GET /api/subjects`
 
@@ -106,7 +110,10 @@ GET /api/subjects?course=<exact program name>
 2. Query `SELECT course_code, course_description FROM courses`.
 3. Keep rows whose leading-letters prefix (`/^[A-Za-z]+/`, upper-cased) is in
    `prefixes`. De-duplicate `N`-suffix variants by `course_description` +
-   numeric stem (keep one).
+   numeric stem — **keep the suffix variant** (e.g. `CS 3106N` over `CS 3106`;
+   it carries the better-tagged data). Generalize tolerantly: same stem +
+   description, differing trailing letter(s) → one row, prefer the
+   suffixed one.
 4. Respond `{ success: true, subjects: [{ code, description }] }`.
 
 **Fallback:** `prefixes` empty (unknown/blank course) → respond with **all**
@@ -165,6 +172,7 @@ no framework, assert-based, matching existing style:
 ## Out of scope
 
 - Subject card → notebook filtering (no notebook→subject data yet).
-- Graduate-program prefixes and noise/cross-listed prefixes.
+- Graduate-program prefixes and noise/cross-listed prefixes (no registerable
+  grad program exists yet).
 - Recovering NULL `department_reserved` scraper gaps.
 - Re-seeding `seed.js` to full program names (separate cleanup).
