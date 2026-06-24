@@ -131,7 +131,7 @@ const PROGRAM_PREFIXES = {
   "Bachelor of Science in Computer Science": ["CS"],
   "Bachelor of Science in Information Systems": ["IS"],
   "Bachelor of Science in Information Technology": ["IT"],
-  "Bachelor of Science in Data Science": [], // REVIEW: no "DS" prefix exists in courses.db; relies on shared CIS only
+  "Bachelor of Science in Data Science": [], // CONFIRMED: courses.db has no Data Science prefix (DS subjects sit under CS/grad codes); relies on shared CIS only until scraper adds them
 
   // ── Philosophy ──
   "Bachelor of Philosophy": ["PHIL"],
