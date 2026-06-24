@@ -1,0 +1,45 @@
+(function (root) {
+  const app = (root.SWAPPR = root.SWAPPR || {});
+
+  function endpoint(path) {
+    return `${app.state.API}${path}`;
+  }
+
+  async function parseJson(response) {
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "Request failed");
+    }
+    return data;
+  }
+
+  async function get(path) {
+    const response = await fetch(endpoint(path));
+    return parseJson(response);
+  }
+
+  async function send(path, method, body) {
+    const response = await fetch(endpoint(path), {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return parseJson(response);
+  }
+
+  app.api = {
+    getDepartments: () => get("/departments"),
+    getSubjects: (course) =>
+      get(`/subjects?course=${encodeURIComponent(course || "")}`),
+    getNotebooks: () => get("/portfolios"),
+    getTopPortfolios: () => get("/portfolios/top"),
+    getRecentPortfolios: () => get("/portfolios/recent"),
+    getSwapps: (username) => get(`/swapps/${encodeURIComponent(username)}`),
+    getProfile: (username) => get(`/profile/${encodeURIComponent(username)}`),
+    createPortfolio: (payload) => send("/portfolios", "POST", payload),
+    updatePortfolio: (id, payload) => send(`/portfolios/${id}`, "PUT", payload),
+    likeNotebook: (payload) => send("/portfolios/like", "POST", payload),
+    sendSwapp: (payload) => send("/swapps", "POST", payload),
+    respondSwapp: (id, payload) => send(`/swapps/${id}/respond`, "PUT", payload),
+  };
+})(window);

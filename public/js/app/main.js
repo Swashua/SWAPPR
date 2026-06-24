@@ -1,0 +1,41 @@
+(function (root) {
+  const app = (root.SWAPPR = root.SWAPPR || {});
+
+  function attachStaticEventListeners() {
+    app.attachThemeToggle();
+
+    const searchInput = document.getElementById("searchInput");
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        app.resetPagination();
+        app.renderNotebooks();
+      });
+    }
+  }
+
+  function exposeCompatibilityGlobals() {
+    root.handleLogout = app.handleLogout;
+    root.filterBy = app.filterBy;
+    root.openProfilePanel = app.openProfilePanel;
+    root.closeProfilePanel = app.closeProfilePanel;
+    root.openAddModal = app.openAddModal;
+    root.openEditNotebookModal = app.openEditNotebookModal;
+    root.closeAddModal = app.closeAddModal;
+    root.submitPortfolio = app.submitPortfolio;
+    root.likeNotebook = app.likeNotebook;
+  }
+
+  app.init = function init() {
+    app.loadUser();
+    app.loadDepartments();
+    app.loadSubjects();
+    app.loadNotebooks();
+    app.loadSwapps();
+    app.loadSidebar();
+    attachStaticEventListeners();
+  };
+
+  exposeCompatibilityGlobals();
+
+  document.addEventListener("DOMContentLoaded", app.init);
+})(window);

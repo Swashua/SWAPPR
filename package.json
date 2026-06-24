@@ -4,12 +4,12 @@
   "description": "",
   "main": "seed.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node lib/cleanDepartments.test.js && node lib/course_mapper.test.js && node lib/subjects.test.js && node public/js/pagination.test.js",
     "start": "node server.js"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "express": "^5.2.1",
     "sqlite3": "^6.0.1"
