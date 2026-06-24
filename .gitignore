@@ -1,2 +1,4 @@
-swappr.db
-swappr.db-journal
+sql/swappr.db
+sql/swappr.db-journal
+node_modules/
+.vs/
