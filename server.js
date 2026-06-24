@@ -41,10 +41,17 @@ name TEXT, username TEXT UNIQUE, password TEXT,
  )`);
     await dbRun(`CREATE TABLE IF NOT EXISTS Notebooks (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
- title TEXT, description TEXT, department TEXT,
+ title TEXT, description TEXT, department TEXT, course_code TEXT,
  author_id INTEGER, file_url TEXT,
  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
  )`);
+    // Idempotent: add course_code to DBs created before this column existed.
+    // "duplicate column name" on re-run is expected and ignored.
+    await dbRun(
+      `ALTER TABLE Notebooks ADD COLUMN course_code TEXT`,
+    ).catch((err) => {
+      if (!/duplicate column name/i.test(err.message)) throw err;
+    });
     await dbRun(`CREATE TABLE IF NOT EXISTS Likes (
  user_id INTEGER, notebook_id INTEGER,
  PRIMARY KEY (user_id, notebook_id)
@@ -246,7 +253,7 @@ app.get("/api/departments", (req, res) => {
 app.get("/api/subjects", (req, res) => {
   const course = req.query.course || "";
   coursesDb.all(
-    `SELECT course_code, course_description FROM courses`,
+    `SELECT course_code, course_description, department_reserved FROM courses`,
     [],
     (err, rows) => {
       if (err) return res.json({ success: false, message: err.message });
@@ -260,9 +267,10 @@ const NB_SELECT = `
       SELECT 
       Notebooks.id, 
       Notebooks.title, 
-      Notebooks.description, 
+      Notebooks.description,
       Notebooks.department,
-      Notebooks.file_url, 
+      Notebooks.course_code,
+      Notebooks.file_url,
       Notebooks.created_at,
       Users.username, 
       COUNT(Likes.notebook_id) AS likes
@@ -300,7 +308,7 @@ app.get("/api/portfolios/recent", (req, res) => {
 app.post("/api/portfolios", (req, res) => {
   console.log("[CREATE NOTEBOOK]", req.body);
 
-  const { title, description, department, author, username, fileUrl } =
+  const { title, description, department, courseCode, author, username, fileUrl } =
     req.body;
   const actualAuthor = author || username;
 
@@ -330,12 +338,13 @@ app.post("/api/portfolios", (req, res) => {
       }
 
       db.run(
-        `INSERT INTO Notebooks (title, description, department, author_id, file_url)
-       VALUES (?,?,?,?,?)`,
+        `INSERT INTO Notebooks (title, description, department, course_code, author_id, file_url)
+       VALUES (?,?,?,?,?,?)`,
         [
           title,
           description || null,
           department || null,
+          courseCode || null,
           user.id,
           fileUrl || null,
         ],
@@ -356,13 +365,14 @@ app.post("/api/portfolios", (req, res) => {
 });
 
 app.put("/api/portfolios/:id", (req, res) => {
-  const { title, description, department, fileUrl } = req.body;
+  const { title, description, department, courseCode, fileUrl } = req.body;
   db.run(
-    `UPDATE Notebooks SET title=?, description=?, department=?, file_url=? WHERE id=?`,
+    `UPDATE Notebooks SET title=?, description=?, department=?, course_code=?, file_url=? WHERE id=?`,
     [
       title,
       description || null,
       department || null,
+      courseCode || null,
       fileUrl || null,
       req.params.id,
     ],
