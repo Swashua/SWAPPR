@@ -9,12 +9,14 @@ let selectedDepartment = null;
 let currentPage = 1;
 const ITEMS_PER_PAGE = 6;
 let departments = [];
+let subjects = [];
 
 // ─── INIT ───────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   // FIX: use sessionStorage (consistent with login.html)
   loadUser();
   loadDepartments();
+  loadSubjects();
   loadNotebooks();
   loadSwapps();
   loadSidebar();
@@ -113,6 +115,21 @@ async function loadDepartments() {
   }
 }
 
+async function loadSubjects() {
+  try {
+    const course = currentUser?.course || "";
+    const res = await fetch(
+      `${API}/subjects?course=${encodeURIComponent(course)}`
+    );
+    const data = await res.json();
+    subjects = data.subjects || [];
+    renderNotebooks();
+  } catch (err) {
+    console.error("Failed to load subjects:", err);
+    subjects = [];
+  }
+}
+
 function populateDeptDropdown() {
   const select = document.getElementById("newDept");
   if (!select) return;
@@ -143,23 +160,6 @@ async function loadNotebooks() {
   } catch (err) {
     console.error("Failed to load notebooks:", err);
   }
-}
-
-function selectDepartment(department) {
-  selectedDepartment = department;
-  currentFilter = "all";
-  resetPagination();
-  updateSectionTitle();
-  document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
-  renderNotebooks();
-}
-
-function resetDepartments() {
-  selectedDepartment = null;
-  resetPagination();
-  updateSectionTitle();
-  document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
-  renderNotebooks();
 }
 
 function resetPagination() {
@@ -273,48 +273,40 @@ function updateSectionTitle() {
   }
 }
 
-function renderDepartmentCards() {
+function renderSubjectCards() {
   const grid = document.getElementById("notebookGrid");
   if (!grid) return;
   grid.innerHTML = "";
   grid.className = "subjects-list";
 
   const sectionTitle = document.getElementById("sectionTitle");
-  if (sectionTitle) {
-    sectionTitle.textContent = "Subjects";
-  }
+  if (sectionTitle) sectionTitle.textContent = "All Subjects";
   const sectionSubtitle = document.getElementById("sectionSubtitle");
   if (sectionSubtitle) {
     sectionSubtitle.textContent =
-      "Browse shared subjects and study resources in a Reddit-style feed.";
+      "Subjects in your program. Browse shared study resources.";
   }
 
-  document.getElementById("backToSubjectsBtn")?.classList.add("hidden");
+  if (subjects.length === 0) {
+    grid.innerHTML = `<p class="text-sm text-purple-400">No subjects found for your program.</p>`;
+    renderPagination(0);
+    return;
+  }
 
-  const visibleDepartments = getPaginatedItems(departments);
-  renderPagination(departments.length);
+  const visibleSubjects = getPaginatedItems(subjects);
+  renderPagination(subjects.length);
 
-  visibleDepartments.forEach((department) => {
+  visibleSubjects.forEach((subject) => {
     const card = document.createElement("div");
     card.className = "subject-card fade-in";
     card.innerHTML = `
       <div class="subject-card-inner">
         <div>
-          <h3 class="subject-title">${department}</h3>
-          <p class="subject-desc">
-            Explore notebooks shared by users for ${department}.
-          </p>
+          <h3 class="subject-title">${subject.code}</h3>
+          <p class="subject-desc">${subject.description || ""}</p>
         </div>
-        <button class="subject-cta" data-department="${department}">
-          View Swaps
-        </button>
       </div>
     `;
-
-    card.querySelector("button")?.addEventListener("click", () => {
-      selectDepartment(department);
-    });
-
     grid.appendChild(card);
   });
 }
@@ -327,7 +319,7 @@ function renderNotebooks() {
     document.getElementById("searchInput")?.value?.toLowerCase() || "";
 
   if (!selectedDepartment && currentFilter === "all" && !searchQuery) {
-    renderDepartmentCards();
+    renderSubjectCards();
     return;
   }
 
