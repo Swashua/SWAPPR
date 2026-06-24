@@ -32,15 +32,22 @@ it into every program's prefix set:
 const UNIVERSAL_PREFIXES = ["NSTP", "GE", "TPE", "EDM"];
 
 function subjectPrefixesFor(programName) {
-  const own = PROGRAM_PREFIXES[programName] || [];
   const entry = courseMap[programName];
-  const shared = entry ? DEPARTMENT_SHARED_PREFIXES[entry.department] || [] : [];
+  if (!entry) return [];               // unknown/stale program -> no subjects
+  const own = PROGRAM_PREFIXES[programName] || [];
+  const shared = DEPARTMENT_SHARED_PREFIXES[entry.department] || [];
   return [...new Set([...own, ...shared, ...UNIVERSAL_PREFIXES])];
 }
 ```
 
 Single source of truth; every mapped program inherits the universal set. No
 change to `lib/subjects.js`, the server endpoint, or the frontend.
+
+The `if (!entry) return []` guard at the top preserves the existing
+stale-course behavior: a course name absent from `courseMap` still returns
+`[]` (shows nothing), so universals are added ONLY to recognized programs.
+`PROGRAM_PREFIXES` keys are a subset of `courseMap` (enforced by an existing
+test), so no real program loses its own prefixes under this guard.
 
 ### Why these four prefixes
 
@@ -75,19 +82,18 @@ couple of graduate rows ride along. Accepted as negligible. Upgrade path if it
 matters later: filter on a course-level numeric threshold or a curriculum-level
 column.
 
-## Side effect
+## Side effect / preserved behavior
 
-`subjectsForCourse` still guards `prefixes.length === 0 → return []`. Because
-`UNIVERSAL_PREFIXES` is non-empty, a program that previously had own+shared = []
-(none currently) would now return universal subjects only. No mapped program is
-affected today; an unmapped/unknown course string still returns nothing only if
-it is absent from `courseMap` — once unioned it would return the universals. To
-preserve "unknown course → empty", the union must apply only to programs that
-exist in the maps; programs not in `courseMap` and not in `PROGRAM_PREFIXES`
-yield `own=[]`, `shared=[]`, but `UNIVERSAL_PREFIXES` would still be added.
+The `if (!entry) return []` guard keeps the existing contract intact:
 
-Decision: acceptable — an unknown course showing only universal GE/NSTP/PE/EDM
-subjects is a reasonable, harmless fallback. No extra guard added.
+- Unknown/stale course name (absent from `courseMap`) → `[]` → shows nothing.
+- Empty course → `[]` → shows nothing.
+- Recognized program with own prefixes `[]` (e.g. Data Science, Accountancy)
+  → previously returned its department-shared prefixes only; now also gets the
+  universal set. This is the intended improvement.
+
+No existing test changes its asserted outcome except where it directly checks
+the universal additions (see Testing).
 
 ## Testing
 
