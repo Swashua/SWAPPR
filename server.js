@@ -2,6 +2,9 @@ console.log("🔥 NEW SQLITE SERVER RUNNING");
 const express = require("express");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
+const { cleanDepartments } = require("./lib/cleanDepartments");
+const { subjectPrefixesFor } = require("./lib/course_mapper");
+const { filterSubjects } = require("./lib/subjects");
 
 const app = express();
 const PORT = 3000;
@@ -9,9 +12,14 @@ const PORT = 3000;
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 
-const db = new sqlite3.Database("./swappr.db", (err) => {
+const db = new sqlite3.Database("./sql/swappr.db", (err) => {
   if (err) return console.error(err.message);
   console.log("Connected to SQLite database.");
+});
+
+const coursesDb = new sqlite3.Database("./sql/courses.db", (err) => {
+  if (err) return console.error(err.message);
+  console.log("Connected to Courses database.");
 });
 
 // ✅ Promisify db.run to wait for table creation
@@ -143,7 +151,12 @@ app.post("/api/login", (req, res) => {
     // 4. Success!
     res.json({
       success: true,
-      user: { id: user.id, username: user.username, name: user.name },
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        course: user.course || "",
+      },
     });
   });
 });
@@ -216,7 +229,35 @@ app.patch("/api/profile", (req, res) => {
   );
 });
 
+// ─── DEPARTMENTS ──────────────────────────────────────────────────────────
+app.get("/api/departments", (req, res) => {
+  coursesDb.all(
+    `SELECT DISTINCT department_reserved FROM courses WHERE department_reserved IS NOT NULL ORDER BY department_reserved`,
+    [],
+    (err, rows) => {
+      if (err) return res.json({ success: false, message: err.message });
+      const departments = cleanDepartments(rows.map((r) => r.department_reserved));
+      res.json({ success: true, departments });
+    }
+  );
+});
+
 // ─── NOTEBOOKS ────────────────────────────────────────────────────────────
+// --- SUBJECTS (filtered by the user's registered program) -------------------
+app.get("/api/subjects", (req, res) => {
+  const course = req.query.course || "";
+  const prefixes = subjectPrefixesFor(course); // [] for unknown -> all subjects
+  coursesDb.all(
+    `SELECT course_code, course_description FROM courses`,
+    [],
+    (err, rows) => {
+      if (err) return res.json({ success: false, message: err.message });
+      const subjects = filterSubjects(rows || [], prefixes);
+      res.json({ success: true, subjects });
+    }
+  );
+});
+
 const NB_SELECT = `
       SELECT 
       Notebooks.id, 

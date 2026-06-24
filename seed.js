@@ -1,5 +1,6 @@
 const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database("./swappr.db");
+const db = new sqlite3.Database("./sql/swappr.db");
+const { COURSE_TO_DEPARTMENT } = require("./lib/constants");
 
 const USERS = [
   {
@@ -183,9 +184,10 @@ async function seed() {
 
   const userIds = {};
   for (const u of USERS) {
+    const department = COURSE_TO_DEPARTMENT[u.course] || u.course;
     const res = await run(
       `INSERT INTO Users (name, username, password, course, department, yearLevel) VALUES (?,?,?,?,?,?)`,
-      [u.name, u.username, u.password, u.course, u.course, u.studentId],
+      [u.name, u.username, u.password, u.course, department, u.studentId],
     );
     userIds[u.username] = res.lastID;
   }
@@ -193,12 +195,13 @@ async function seed() {
 
   const notebookIds = [];
   for (const nb of NOTEBOOKS) {
+    const mappedDepartment = COURSE_TO_DEPARTMENT[nb.department] || nb.department;
     const res = await run(
       `INSERT INTO Notebooks (title, description, department, author_id, file_url) VALUES (?,?,?,?,?)`,
       [
         nb.title,
         nb.description,
-        nb.department,
+        mappedDepartment,
         userIds[nb.author],
         nb.file_url,
       ],
