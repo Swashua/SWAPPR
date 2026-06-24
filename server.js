@@ -2,6 +2,7 @@ console.log("🔥 NEW SQLITE SERVER RUNNING");
 const express = require("express");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
+const { cleanDepartments } = require("./lib/cleanDepartments");
 
 const app = express();
 const PORT = 3000;
@@ -9,9 +10,14 @@ const PORT = 3000;
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 
-const db = new sqlite3.Database("./swappr.db", (err) => {
+const db = new sqlite3.Database("./sql/swappr.db", (err) => {
   if (err) return console.error(err.message);
   console.log("Connected to SQLite database.");
+});
+
+const coursesDb = new sqlite3.Database("./sql/courses.db", (err) => {
+  if (err) return console.error(err.message);
+  console.log("Connected to Courses database.");
 });
 
 // ✅ Promisify db.run to wait for table creation
@@ -213,6 +219,19 @@ app.patch("/api/profile", (req, res) => {
         user: { name, bio, course: crs, department: dept, yearLevel },
       });
     },
+  );
+});
+
+// ─── DEPARTMENTS ──────────────────────────────────────────────────────────
+app.get("/api/departments", (req, res) => {
+  coursesDb.all(
+    `SELECT DISTINCT department_reserved FROM courses WHERE department_reserved IS NOT NULL ORDER BY department_reserved`,
+    [],
+    (err, rows) => {
+      if (err) return res.json({ success: false, message: err.message });
+      const departments = cleanDepartments(rows.map((r) => r.department_reserved));
+      res.json({ success: true, departments });
+    }
   );
 });
 
