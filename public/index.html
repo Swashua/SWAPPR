@@ -19,68 +19,6 @@
   <body
     class="font-sans min-h-screen overflow-x-hidden transition-colors duration-300 text-gray-900 dark:text-purple-100 bg-transparent"
   >
-    <!-- ── Chat Widget ───────────────────────────── -->
-    <button
-      id="chatToggle"
-      onclick="toggleChat()"
-      class="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-700 text-white text-xl shadow-lg flex items-center justify-center z-50 transition"
-      title="Open Chat"
-    >
-      <i data-lucide="message-circle" class="w-6 h-6"></i>
-    </button>
-
-    <!-- Chat Panel -->
-    <div
-      id="chatPanel"
-      class="fixed bottom-24 right-6 w-80 h-[420px] bg-[#0f0b1d] text-white dark:bg-[#463681] border border-purple-500/20 dark:border-gray-200 rounded-2xl shadow-xl flex flex-col overflow-hidden scale-0 opacity-0 origin-bottom-right transition-all duration-300 z-50"
-    >
-      <!-- Header -->
-      <div
-        class="px-4 py-3 flex items-center justify-between border-b border-purple-100 dark:border-[#2e2258] bg-purple-700 dark:bg-[#2b1f52] text-white"
-      >
-        <p class="font-bold text-sm text-[#2e1065] dark:text-purple-200">
-          SWAPPR Workroom
-        </p>
-        <button
-          onclick="toggleChat()"
-          class="text-xs opacity-70 hover:opacity-100"
-        >
-          <i data-lucide="x" class="w-4 h-4"></i>
-        </button>
-      </div>
-
-      <!-- Messages -->
-      <div class="flex-1 p-3 space-y-2 overflow-y-auto text-xs bg-[#463681]">
-        <div
-          class="bg-white/10 dark:bg-purple-100 text-white dark:text-gray-900 p-2 rounded-lg w-fit max-w-[75%]"
-        >
-          Hey! Ready to swap notes?
-        </div>
-        <div
-          class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white dark:from-purple-600 dark:to-indigo-600 p-2 rounded-lg w-fit max-w-[75%] ml-auto"
-        >
-          Yes! Let's collaborate!
-        </div>
-      </div>
-
-      <!-- Input -->
-      <div
-        class="p-2 border-t border-purple-100 dark:border-white/[0.06] flex gap-2"
-      >
-        <input
-          type="text"
-          placeholder="Discuss notes (swap required)..."
-          class="flex-1 text-xs px-3 py-2 rounded-lg outline-none input-field"
-          disabled
-        />
-        <button
-          class="px-3 py-2 text-xs rounded-lg bg-purple-600 text-white opacity-60 cursor-not-allowed"
-        >
-          Send
-        </button>
-      </div>
-    </div>
-
     <!-- Header -->
     <header
       class="w-full overflow-hidden px-4 py-4 flex items-center justify-between gap-3 bg-gradient-to-r from-[#0f172a] via-[#4f46e5] to-[#9333ea] text-white sticky top-0 z-40 shadow-lg"

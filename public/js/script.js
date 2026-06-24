@@ -100,18 +100,6 @@ function handleLogout() {
   window.location.href = "login.html";
 }
 
-function toggleChat() {
-  const panel = document.getElementById("chatPanel");
-
-  if (panel.classList.contains("scale-0")) {
-    panel.classList.remove("scale-0", "opacity-0");
-    panel.classList.add("scale-100", "opacity-100");
-  } else {
-    panel.classList.add("scale-0", "opacity-0");
-    panel.classList.remove("scale-100", "opacity-100");
-  }
-}
-
 // ─── DEPARTMENTS ────────────────────────────────────────
 async function loadDepartments() {
   try {
