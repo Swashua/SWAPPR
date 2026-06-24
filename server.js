@@ -3,8 +3,7 @@ const express = require("express");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const { cleanDepartments } = require("./lib/cleanDepartments");
-const { subjectPrefixesFor } = require("./lib/course_mapper");
-const { filterSubjects } = require("./lib/subjects");
+const { subjectsForCourse } = require("./lib/subjects");
 
 const app = express();
 const PORT = 3000;
@@ -246,13 +245,12 @@ app.get("/api/departments", (req, res) => {
 // --- SUBJECTS (filtered by the user's registered program) -------------------
 app.get("/api/subjects", (req, res) => {
   const course = req.query.course || "";
-  const prefixes = subjectPrefixesFor(course); // [] for unknown -> all subjects
   coursesDb.all(
     `SELECT course_code, course_description FROM courses`,
     [],
     (err, rows) => {
       if (err) return res.json({ success: false, message: err.message });
-      const subjects = filterSubjects(rows || [], prefixes);
+      const subjects = subjectsForCourse(rows || [], course);
       res.json({ success: true, subjects });
     }
   );
