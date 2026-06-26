@@ -2,8 +2,8 @@
 
 **Date:** 2026-06-25
 **Status:** Deferred (out of scope for the initial program-subject-filter build)
-**Related:** [specs/2026-06-25-program-subject-filter-design.md](specs/2026-06-25-program-subject-filter-design.md),
-[plans/2026-06-25-program-subject-filter.md](plans/2026-06-25-program-subject-filter.md)
+**Related:** [2026-06-25-program-subject-filter-design.md](2026-06-25-program-subject-filter-design.md),
+[2026-06-25-program-subject-filter.md](2026-06-25-program-subject-filter.md)
 
 These are **data-accuracy refinements** to the program→prefix map in
 `lib/course_mapper.js`. None block the feature shipping. Every prefix assigned

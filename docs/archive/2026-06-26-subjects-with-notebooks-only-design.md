@@ -19,13 +19,13 @@ database under that subject's `course_code`.
 `GET /api/subjects` returns all program subjects plus the codes that have
 notebooks; the client filters the cards, not the dropdown.
 
-Server [server.js](../../../server.js):
+Server [server.js](../../server.js):
 
 ```js
 res.json({ success: true, subjects, codesWithNotebooks });
 ```
 
-Client [subjects.js](../../../public/js/app/subjects.js):
+Client [subjects.js](../../public/js/app/subjects.js):
 
 - `loadSubjects`: `app.state.codesWithNotebooks = new Set(data.codesWithNotebooks)`.
 - `populateSubjectDropdown`: unchanged — uses full `state.subjects`.

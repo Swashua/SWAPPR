@@ -15,8 +15,8 @@ existing notebooks.
 - `sql/courses.db` → table `courses` (2465 rows): `course_id`, `course_code`,
   `course_description`, `department_reserved`.
 - Each course already carries a *dirty* `department_reserved` string.
-- `/api/departments` ([server.js](../../../server.js)) already cleans the
-  distinct department values via [lib/cleanDepartments.js](../../../lib/cleanDepartments.js)
+- `/api/departments` ([server.js](../../server.js)) already cleans the
+  distinct department values via [lib/cleanDepartments.js](../../lib/cleanDepartments.js)
   into 32 display names. Course lists must line up with those exact names.
 
 ## Data findings
@@ -94,7 +94,7 @@ click dept card → selectDepartment(dept)
 
 ## Testing
 
-Extend [lib/cleanDepartments.test.js](../../../lib/cleanDepartments.test.js)
+Extend [lib/cleanDepartments.test.js](../../lib/cleanDepartments.test.js)
 with `departmentForCourse` cases:
 
 - normal value → cleaned name

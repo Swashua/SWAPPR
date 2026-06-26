@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node.js, Express, `sqlite3`, vanilla JS frontend. Tests are plain `node` scripts using the built-in `assert` module (no test framework), run as `node lib/<file>.test.js`. Matches existing `lib/cleanDepartments.test.js`.
 
-**Spec:** [docs/superpowers/specs/2026-06-25-program-subject-filter-design.md](../specs/2026-06-25-program-subject-filter-design.md). Read it first.
+**Spec:** [2026-06-25-program-subject-filter-design.md](2026-06-25-program-subject-filter-design.md). Read it first.
 
 ## Global Constraints
 
