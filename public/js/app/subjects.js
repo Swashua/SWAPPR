@@ -16,6 +16,7 @@
       const course = app.state.currentUser?.course || "";
       const data = await app.api.getSubjects(course);
       app.state.subjects = data.subjects || [];
+      app.state.codesWithNotebooks = new Set(data.codesWithNotebooks || []);
       app.populateSubjectDropdown();
       app.renderNotebooks();
     } catch (err) {
@@ -78,8 +79,19 @@
       return;
     }
 
-    const visibleSubjects = app.getPaginatedItems(app.state.subjects);
-    app.renderPagination(app.state.subjects.length);
+    // Cards only show subjects that have at least one notebook in the DB.
+    // The dropdown (populateSubjectDropdown) still uses the full subject list.
+    const have = app.state.codesWithNotebooks || new Set();
+    const cardSubjects = app.state.subjects.filter((s) => have.has(s.code));
+
+    if (cardSubjects.length === 0) {
+      grid.innerHTML = `<p class="text-sm text-purple-400">No subjects with shared notebooks yet.</p>`;
+      app.renderPagination(0);
+      return;
+    }
+
+    const visibleSubjects = app.getPaginatedItems(cardSubjects);
+    app.renderPagination(cardSubjects.length);
 
     visibleSubjects.forEach((subject) => {
       const card = document.createElement("div");

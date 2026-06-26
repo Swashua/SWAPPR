@@ -7,24 +7,34 @@ database under that subject's `course_code`.
 
 ## Decisions
 
-- **Match rule:** exact `course_code` equality (trimmed both sides).
-- **Where:** server-side, in `GET /api/subjects`. Client unchanged.
+- **Match rule:** exact `course_code` equality (trimmed both sides). Dropdown
+  values are the same deduped subject codes, so notebooks can only be tagged
+  with a code that exists as a subject — no N-suffix mismatch.
+- **Where:** the filter applies ONLY to the subject *cards*. The upload
+  dropdown (`select#newSubject`) must list ALL program subjects so users can
+  tag a notebook for a subject that has none yet.
 
 ## Change
 
-In [server.js](../../../server.js) `GET /api/subjects`: after computing
-`subjects` via `subjectsForCourse`, query distinct non-empty `course_code`
-values from the `Notebooks` table and keep only subjects whose `code` is in
-that set.
+`GET /api/subjects` returns all program subjects plus the codes that have
+notebooks; the client filters the cards, not the dropdown.
+
+Server [server.js](../../../server.js):
 
 ```js
-const have = new Set(nbRows.map((r) => String(r.course_code).trim()));
-const subjects = subjectsForCourse(rows, course).filter((s) => have.has(s.code));
+res.json({ success: true, subjects, codesWithNotebooks });
 ```
+
+Client [subjects.js](../../../public/js/app/subjects.js):
+
+- `loadSubjects`: `app.state.codesWithNotebooks = new Set(data.codesWithNotebooks)`.
+- `populateSubjectDropdown`: unchanged — uses full `state.subjects`.
+- `renderSubjectCards`: `cardSubjects = subjects.filter((s) => have.has(s.code))`;
+  paginate the filtered list.
 
 ## Notes
 
-- Empty result is already handled by the existing "No subjects found" UI in
-  `renderSubjectCards`.
-- Skipped: prefix/stem matching, client-side filtering, caching. Add if a
-  concrete need appears.
+- Two empty states: no program subjects → "No subjects found for your
+  program."; program subjects exist but none have notebooks → "No subjects
+  with shared notebooks yet."
+- Skipped: prefix/stem matching, caching. Add if a concrete need appears.

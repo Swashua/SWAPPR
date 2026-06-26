@@ -258,14 +258,15 @@ app.get("/api/subjects", (req, res) => {
     (err, rows) => {
       if (err) return res.json({ success: false, message: err.message });
       const subjects = subjectsForCourse(rows || [], course);
-      // Only surface subjects that have at least one notebook under their code.
+      // Return all program subjects (dropdown needs them). Also report which
+      // codes have notebooks so the cards view can hide empty ones client-side.
       db.all(
         `SELECT DISTINCT course_code FROM Notebooks WHERE course_code IS NOT NULL AND TRIM(course_code) != ''`,
         [],
         (err2, nbRows) => {
           if (err2) return res.json({ success: false, message: err2.message });
-          const have = new Set((nbRows || []).map((r) => String(r.course_code).trim()));
-          res.json({ success: true, subjects: subjects.filter((s) => have.has(s.code)) });
+          const codesWithNotebooks = (nbRows || []).map((r) => String(r.course_code).trim());
+          res.json({ success: true, subjects, codesWithNotebooks });
         }
       );
     }
