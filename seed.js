@@ -188,6 +188,61 @@ const get = (sql, params = []) =>
     }),
   );
 
+// Bulk-generate notebooks from real courses.db rows, all in one transaction.
+// ponytail: single transaction = one fsync; ~100k inserts/sec. PRAGMA
+// synchronous=OFF only if this is ever measurably slow (it won't be at 10k-50k).
+async function seedBulkNotebooks(count, userIds) {
+  const userIdList = Object.values(userIds);
+  const coursesDb = new sqlite3.Database("./sql/courses.db");
+  const courseRows = await new Promise((res, rej) =>
+    coursesDb.all(
+      `SELECT course_code, course_description, department_reserved FROM courses WHERE course_code IS NOT NULL`,
+      [],
+      (err, rows) => (err ? rej(err) : res(rows)),
+    ),
+  );
+  coursesDb.close();
+
+  // courses.db descriptions are ALL CAPS; title-case them so notebooks read real.
+  const titleCase = (s) =>
+    s.toLowerCase().replace(/\b\w/g, (ch) => ch.toUpperCase());
+  const TITLE_SHAPES = [
+    (subj) => `${subj}`,
+    (subj) => `${subj} — Midterm Reviewer`,
+    (subj) => `${subj} Lecture Notes`,
+    (subj) => `${subj}: Finals Cheat Sheet`,
+    (subj) => `Complete ${subj} Summary`,
+    (subj) => `${subj} Problem Sets w/ Solutions`,
+  ];
+  const DESC_SHAPES = [
+    (subj) => `Handwritten ${subj} notes from the whole semester.`,
+    (subj) => `Condensed ${subj} reviewer covering the key topics.`,
+    (subj) => `Annotated slides and worked examples for ${subj}.`,
+    (subj) => `My personal ${subj} study guide — shared for swaps.`,
+  ];
+
+  await run("BEGIN");
+  const stmt = db.prepare(
+    `INSERT INTO Notebooks (title, description, department, course_code, author_id, file_url) VALUES (?,?,?,?,?,?)`,
+  );
+  for (let i = 0; i < count; i++) {
+    const c = courseRows[i % courseRows.length];
+    const subj = titleCase(c.course_description);
+    stmt.run(
+      TITLE_SHAPES[i % TITLE_SHAPES.length](subj),
+      DESC_SHAPES[i % DESC_SHAPES.length](subj),
+      titleCase(c.department_reserved || ""),
+      c.course_code,
+      userIdList[i % userIdList.length],
+      `https://drive.google.com/example/nb-${i}`,
+    );
+  }
+  await new Promise((res, rej) =>
+    stmt.finalize((e) => (e ? rej(e) : res())),
+  );
+  await run("COMMIT");
+}
+
 async function seed() {
   assertKnownCourses();
   console.log("🌱 Starting fresh seed...");
@@ -239,6 +294,12 @@ async function seed() {
     notebookIds.push(res.lastID);
   }
   console.log("📓 Notebooks seeded.");
+
+  const bulkCount = Number(process.argv[2]) || 0;
+  if (bulkCount > 0) {
+    await seedBulkNotebooks(bulkCount, userIds);
+    console.log(`📚 ${bulkCount} bulk notebooks seeded.`);
+  }
 
   for (const l of LIKES) {
     await run(
