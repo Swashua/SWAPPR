@@ -1,5 +1,8 @@
+*.db
+*.db-journal
 sql/swappr.db
 sql/swappr.db-journal
+sql/backup/swappr.db
 node_modules/
 .vs/
 desktop.ini
