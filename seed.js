@@ -61,6 +61,7 @@ const NOTEBOOKS = [
     title: "Data Structures & Algorithms",
     description: "Complete notes with examples in Python.",
     course: "Bachelor of Science in Computer Science",
+    course_code: "CIS 2101",
     file_url: "https://drive.google.com/example/ana-dsa",
   },
   {
@@ -68,6 +69,7 @@ const NOTEBOOKS = [
     title: "Object-Oriented Programming",
     description: "OOP principles with Java walkthroughs.",
     course: "Bachelor of Science in Computer Science",
+    course_code: "CIS 2103",
     file_url: "https://drive.google.com/example/ana-oop",
   },
   {
@@ -75,6 +77,7 @@ const NOTEBOOKS = [
     title: "Web Development Fundamentals",
     description: "HTML, CSS, and vanilla JS basics.",
     course: "Bachelor of Science in Information Technology",
+    course_code: "CIS 1202",
     file_url: "https://drive.google.com/example/marco-webdev",
   },
   {
@@ -82,6 +85,7 @@ const NOTEBOOKS = [
     title: "Database Management Systems",
     description: "SQL queries, normalization, and ER diagrams.",
     course: "Bachelor of Science in Information Technology",
+    course_code: "CIS 1204",
     file_url: "https://drive.google.com/example/marco-dbms",
   },
   {
@@ -89,6 +93,7 @@ const NOTEBOOKS = [
     title: "Circuit Analysis Notes",
     description: "KVL, KCL, Thevenin/Norton theorems.",
     course: "Bachelor of Science in Electrical Engineering",
+    course_code: "EE 2101",
     file_url: "https://drive.google.com/example/lia-circuits",
   },
   {
@@ -96,13 +101,15 @@ const NOTEBOOKS = [
     title: "Calculus I — Limits & Derivatives",
     description: "Detailed walkthrough of limits and differentiation.",
     course: "Bachelor of Secondary Education major in Mathematics",
+    course_code: "MAT 3101",
     file_url: "https://drive.google.com/example/josh-calc1",
   },
   {
     author: "josh_m",
-    title: "Linear Algebra",
-    description: "Vectors, matrices, and eigenvalues.",
+    title: "Plane and Solid Geometry",
+    description: "Theorems, proofs, and 3D solid figures.",
     course: "Bachelor of Secondary Education major in Mathematics",
+    course_code: "MATHED 1202",
     file_url: "https://drive.google.com/example/josh-linalg",
   },
   {
@@ -110,6 +117,7 @@ const NOTEBOOKS = [
     title: "Abnormal Psychology",
     description: "DSM-5 overview and case studies.",
     course: "Bachelor of Science in Psychology",
+    course_code: "PSY 3216",
     file_url: "https://drive.google.com/example/cami-abpsych",
   },
   {
@@ -117,6 +125,7 @@ const NOTEBOOKS = [
     title: "Operating Systems",
     description: "Process scheduling and memory management.",
     course: "Bachelor of Science in Computer Science",
+    course_code: "CS 3104N",
     file_url: "https://drive.google.com/example/renz-os",
   },
   {
@@ -124,6 +133,7 @@ const NOTEBOOKS = [
     title: "Fundamentals of Nursing",
     description: "Care planning and patient assessment.",
     course: "Bachelor of Science in Nursing",
+    course_code: "NCM 1203",
     file_url: "https://drive.google.com/example/sofia-nursing",
   },
 ];
@@ -192,7 +202,7 @@ async function seed() {
     `CREATE TABLE Users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, username TEXT UNIQUE, password TEXT, bio TEXT, course TEXT, department TEXT, yearLevel TEXT)`,
   );
   await run(
-    `CREATE TABLE Notebooks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, description TEXT, department TEXT, author_id INTEGER, file_url TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE Notebooks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, description TEXT, department TEXT, course_code TEXT, author_id INTEGER, file_url TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
   );
   await run(
     `CREATE TABLE Likes (user_id INTEGER, notebook_id INTEGER, PRIMARY KEY (user_id, notebook_id))`,
@@ -216,11 +226,12 @@ async function seed() {
   for (const nb of NOTEBOOKS) {
     const mappedDepartment = COURSE_TO_DEPARTMENT[nb.course] || nb.course;
     const res = await run(
-      `INSERT INTO Notebooks (title, description, department, author_id, file_url) VALUES (?,?,?,?,?)`,
+      `INSERT INTO Notebooks (title, description, department, course_code, author_id, file_url) VALUES (?,?,?,?,?,?)`,
       [
         nb.title,
         nb.description,
         mappedDepartment,
+        nb.course_code,
         userIds[nb.author],
         nb.file_url,
       ],
