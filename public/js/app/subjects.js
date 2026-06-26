@@ -82,10 +82,23 @@
     // Cards only show subjects that have at least one notebook in the DB.
     // The dropdown (populateSubjectDropdown) still uses the full subject list.
     const have = app.state.codesWithNotebooks || new Set();
-    const cardSubjects = app.state.subjects.filter((s) => have.has(s.code));
+    const query =
+      document.getElementById("searchInput")?.value?.toLowerCase().trim() || "";
+
+    const cardSubjects = app.state.subjects.filter((s) => {
+      if (!have.has(s.code)) return false;
+      if (!query) return true;
+      // At the All Subjects level, search filters cards by code + description.
+      return (
+        s.code.toLowerCase().includes(query) ||
+        (s.description || "").toLowerCase().includes(query)
+      );
+    });
 
     if (cardSubjects.length === 0) {
-      grid.innerHTML = `<p class="text-sm text-purple-400">No subjects with shared notebooks yet.</p>`;
+      grid.innerHTML = query
+        ? `<p class="text-sm text-purple-400">No subjects match "${query}".</p>`
+        : `<p class="text-sm text-purple-400">No subjects with shared notebooks yet.</p>`;
       app.renderPagination(0);
       return;
     }

@@ -288,11 +288,12 @@
     if (!grid) return;
 
     const searchQuery = currentSearchQuery();
+    // Top-level All Subjects view: search filters the subject cards, not
+    // notebooks, so stay on the cards view even with a query present.
     if (
       !app.state.selectedDepartment &&
       !app.state.selectedSubject &&
-      app.state.currentFilter === "all" &&
-      !searchQuery
+      app.state.currentFilter === "all"
     ) {
       app.renderSubjectCards();
       return;
