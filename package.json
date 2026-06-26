@@ -4,7 +4,7 @@
   "description": "",
   "main": "seed.js",
   "scripts": {
-    "test": "node lib/cleanDepartments.test.js && node lib/course_mapper.test.js && node lib/subjects.test.js && node public/js/pagination.test.js",
+    "test": "node lib/cleanDepartments.test.js && node lib/course_mapper.test.js && node lib/subjects.test.js && node public/js/pagination.test.js && node seed.test.js",
     "start": "node server.js"
   },
   "keywords": [],

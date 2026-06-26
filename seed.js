@@ -1,55 +1,56 @@
 const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database("./sql/swappr.db");
 const { COURSE_TO_DEPARTMENT } = require("./lib/constants");
+
+let db;
 
 const USERS = [
   {
     name: "Ana Reyes",
     username: "ana_reyes",
     password: "pass1234",
-    course: "BS Computer Science",
+    course: "Bachelor of Science in Computer Science",
     studentId: "2021100001",
   },
   {
     name: "Marco Santos",
     username: "marco_s",
     password: "pass1234",
-    course: "BS Information Technology",
+    course: "Bachelor of Science in Information Technology",
     studentId: "2021100002",
   },
   {
     name: "Lia Cruz",
     username: "lia_cruz",
     password: "pass1234",
-    course: "BS Electrical Engineering",
+    course: "Bachelor of Science in Electrical Engineering",
     studentId: "2020100003",
   },
   {
     name: "Josh Mendoza",
     username: "josh_m",
     password: "pass1234",
-    course: "BS Mathematics",
+    course: "Bachelor of Secondary Education major in Mathematics",
     studentId: "2022100004",
   },
   {
     name: "Camille Tan",
     username: "cami_tan",
     password: "pass1234",
-    course: "BS Psychology",
+    course: "Bachelor of Science in Psychology",
     studentId: "2021100005",
   },
   {
     name: "Renz Villanueva",
     username: "renz_v",
     password: "pass1234",
-    course: "BS Computer Science",
+    course: "Bachelor of Science in Computer Science",
     studentId: "2023100006",
   },
   {
     name: "Sofia dela Cruz",
     username: "sofia_dc",
     password: "pass1234",
-    course: "BS Nursing",
+    course: "Bachelor of Science in Nursing",
     studentId: "2020100007",
   },
 ];
@@ -59,70 +60,70 @@ const NOTEBOOKS = [
     author: "ana_reyes",
     title: "Data Structures & Algorithms",
     description: "Complete notes with examples in Python.",
-    department: "BS Computer Science",
+    course: "Bachelor of Science in Computer Science",
     file_url: "https://drive.google.com/example/ana-dsa",
   },
   {
     author: "ana_reyes",
     title: "Object-Oriented Programming",
     description: "OOP principles with Java walkthroughs.",
-    department: "BS Computer Science",
+    course: "Bachelor of Science in Computer Science",
     file_url: "https://drive.google.com/example/ana-oop",
   },
   {
     author: "marco_s",
     title: "Web Development Fundamentals",
     description: "HTML, CSS, and vanilla JS basics.",
-    department: "BS Information Technology",
+    course: "Bachelor of Science in Information Technology",
     file_url: "https://drive.google.com/example/marco-webdev",
   },
   {
     author: "marco_s",
     title: "Database Management Systems",
     description: "SQL queries, normalization, and ER diagrams.",
-    department: "BS Information Technology",
+    course: "Bachelor of Science in Information Technology",
     file_url: "https://drive.google.com/example/marco-dbms",
   },
   {
     author: "lia_cruz",
     title: "Circuit Analysis Notes",
     description: "KVL, KCL, Thevenin/Norton theorems.",
-    department: "BS Electrical Engineering",
+    course: "Bachelor of Science in Electrical Engineering",
     file_url: "https://drive.google.com/example/lia-circuits",
   },
   {
     author: "josh_m",
     title: "Calculus I — Limits & Derivatives",
     description: "Detailed walkthrough of limits and differentiation.",
-    department: "BS Mathematics",
+    course: "Bachelor of Secondary Education major in Mathematics",
     file_url: "https://drive.google.com/example/josh-calc1",
   },
   {
     author: "josh_m",
     title: "Linear Algebra",
     description: "Vectors, matrices, and eigenvalues.",
-    department: "BS Mathematics",
+    course: "Bachelor of Secondary Education major in Mathematics",
     file_url: "https://drive.google.com/example/josh-linalg",
   },
   {
     author: "cami_tan",
     title: "Abnormal Psychology",
     description: "DSM-5 overview and case studies.",
-    department: "BS Psychology",
+    course: "Bachelor of Science in Psychology",
     file_url: "https://drive.google.com/example/cami-abpsych",
   },
   {
     author: "renz_v",
     title: "Operating Systems",
     description: "Process scheduling and memory management.",
-    department: "BS Computer Science",
+    course: "Bachelor of Science in Computer Science",
     file_url: "https://drive.google.com/example/renz-os",
   },
   {
     author: "sofia_dc",
     title: "Fundamentals of Nursing",
     description: "Care planning and patient assessment.",
-    department: "BS Nursing",
+    course: "Bachelor of Science in Nursing",
     file_url: "https://drive.google.com/example/sofia-nursing",
   },
 ];
@@ -148,6 +149,22 @@ const SWAPPS = [
   { from: "cami_tan", to: "sofia_dc", status: "pending" },
 ];
 
+function assertKnownCourses() {
+  const courses = new Set([
+    ...USERS.map((user) => user.course),
+    ...NOTEBOOKS.map((notebook) => notebook.course),
+  ]);
+  const unknownCourses = [...courses].filter(
+    (course) => !COURSE_TO_DEPARTMENT[course],
+  );
+
+  if (unknownCourses.length > 0) {
+    throw new Error(
+      `Seed data contains unknown course(s): ${unknownCourses.join(", ")}`,
+    );
+  }
+}
+
 const run = (sql, params = []) =>
   new Promise((res, rej) =>
     db.run(sql, params, function (err) {
@@ -162,7 +179,9 @@ const get = (sql, params = []) =>
   );
 
 async function seed() {
+  assertKnownCourses();
   console.log("🌱 Starting fresh seed...");
+  db = new sqlite3.Database("./sql/swappr.db");
 
   await run(`DROP TABLE IF EXISTS Users`);
   await run(`DROP TABLE IF EXISTS Notebooks`);
@@ -195,7 +214,7 @@ async function seed() {
 
   const notebookIds = [];
   for (const nb of NOTEBOOKS) {
-    const mappedDepartment = COURSE_TO_DEPARTMENT[nb.department] || nb.department;
+    const mappedDepartment = COURSE_TO_DEPARTMENT[nb.course] || nb.course;
     const res = await run(
       `INSERT INTO Notebooks (title, description, department, author_id, file_url) VALUES (?,?,?,?,?)`,
       [
@@ -228,7 +247,18 @@ async function seed() {
   db.close();
 }
 
-seed().catch((err) => {
-  console.error("❌ Error:", err.message);
-  db.close();
-});
+module.exports = {
+  USERS,
+  NOTEBOOKS,
+  LIKES,
+  SWAPPS,
+  assertKnownCourses,
+  seed,
+};
+
+if (require.main === module) {
+  seed().catch((err) => {
+    console.error("❌ Error:", err.message);
+    if (db) db.close();
+  });
+}

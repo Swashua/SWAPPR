@@ -30,7 +30,7 @@ deferred in recent design notes.
   - Source: `docs/superpowers/specs/2026-06-25-program-subject-filter-design.md`
   - Future execution: revisit ignored prefixes when graduate programs or global
     subject groups become registerable/filterable.
-- [ ] Re-seed `seed.js` users or fixtures to use full program names.
+- [x] Re-seed `seed.js` users or fixtures to use full program names.
   - Source: `docs/superpowers/specs/2026-06-25-program-subject-filter-design.md`
   - Future execution: align seed data with `course_mapper.js` program names so
     test users exercise the same mapping path as registered users.
