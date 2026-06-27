@@ -1,23 +1,93 @@
 require("dotenv").config();
-console.log("🔥 NEW SQLITE SERVER RUNNING");
+
+const crypto = require("crypto");
 const express = require("express");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const nodemailer = require("nodemailer");
 const { cleanDepartments } = require("./lib/cleanDepartments");
+const {
+  OTP_MAX_ATTEMPTS,
+  OTP_RESEND_COOLDOWN_MS,
+  OTP_TTL_MS,
+  hashOtp,
+  secondsUntilResend,
+  verifyOtpHash,
+} = require("./lib/otpPolicy");
 const { subjectsForCourse, filterSubjects } = require("./lib/subjects");
 
-// ─── EMAIL / OTP ──────────────────────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-});
-
-// In-memory OTP store: email → { otp, expires, verified }
-const otpStore = new Map();
-
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || "127.0.0.1";
+const HASH_PREFIX = "scrypt";
+
+function normalizeEmail(email) {
+  return String(email || "")
+    .trim()
+    .toLowerCase();
+}
+
+function isValidSchoolEmail(email) {
+  return /^\d+@usc\.edu\.ph$/i.test(email);
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derivedKey = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `${HASH_PREFIX}$${salt}$${derivedKey}`;
+}
+
+function verifyPassword(password, storedPassword) {
+  if (!storedPassword) return false;
+  if (!storedPassword.startsWith(`${HASH_PREFIX}$`)) {
+    return storedPassword === password;
+  }
+
+  const [, salt, expectedHash] = storedPassword.split("$");
+  if (!salt || !expectedHash) return false;
+
+  const actualHash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return crypto.timingSafeEqual(
+    Buffer.from(expectedHash, "hex"),
+    Buffer.from(actualHash, "hex"),
+  );
+}
+
+function createMailTransport() {
+  if (process.env.SMTP_HOST) {
+    const port = Number(process.env.SMTP_PORT) || 587;
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port,
+      secure: process.env.SMTP_SECURE === "true" || port === 465,
+      auth: process.env.SMTP_USER
+        ? {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          }
+        : undefined,
+    });
+  }
+
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    return nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+  }
+
+  return null;
+}
+
+const transporter = createMailTransport();
+const mailFromAddress =
+  process.env.SMTP_FROM ||
+  process.env.SMTP_USER ||
+  process.env.EMAIL_USER ||
+  "";
 
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
@@ -32,72 +102,173 @@ const coursesDb = new sqlite3.Database("./sql/courses.db", (err) => {
   console.log("Connected to Courses database.");
 });
 
-// ✅ Promisify db.run to wait for table creation
-const dbRun = (sql) =>
+const dbRun = (sql, params = []) =>
   new Promise((resolve, reject) => {
-    db.run(sql, (err) => {
+    db.run(sql, params, function onRun(err) {
       if (err) reject(err);
-      else resolve();
+      else resolve(this);
     });
   });
 
-// ✅ Create tables and WAIT before starting server
+const dbGet = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) reject(err);
+      else resolve(row);
+    });
+  });
+
 async function initializeDatabase() {
   try {
-    console.log("📦 Creating tables...");
+    console.log("Creating tables...");
     await dbRun(`CREATE TABLE IF NOT EXISTS Users (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
-name TEXT, username TEXT UNIQUE, password TEXT,
- bio TEXT, course TEXT, department TEXT, yearLevel TEXT, email TEXT
- )`);
+name TEXT,
+username TEXT UNIQUE,
+password TEXT,
+bio TEXT,
+course TEXT,
+department TEXT,
+yearLevel TEXT,
+email TEXT,
+studentId TEXT
+)`);
     await dbRun(`ALTER TABLE Users ADD COLUMN email TEXT`).catch((err) => {
       if (!/duplicate column name/i.test(err.message)) throw err;
     });
-    await dbRun(`CREATE TABLE IF NOT EXISTS Notebooks (
- id INTEGER PRIMARY KEY AUTOINCREMENT,
- title TEXT, description TEXT, department TEXT, course_code TEXT,
- author_id INTEGER, file_url TEXT,
- created_at DATETIME DEFAULT CURRENT_TIMESTAMP
- )`);
-    // Idempotent: add course_code to DBs created before this column existed.
-    // "duplicate column name" on re-run is expected and ignored.
+    await dbRun(`ALTER TABLE Users ADD COLUMN studentId TEXT`).catch((err) => {
+      if (!/duplicate column name/i.test(err.message)) throw err;
+    });
     await dbRun(
-      `ALTER TABLE Notebooks ADD COLUMN course_code TEXT`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+       ON Users(email)
+       WHERE email IS NOT NULL AND TRIM(email) != ''`,
+    );
+    await dbRun(`CREATE TABLE IF NOT EXISTS EmailOtps (
+email TEXT PRIMARY KEY,
+otp TEXT NOT NULL DEFAULT '',
+otpHash TEXT,
+expiresAt INTEGER NOT NULL,
+verified INTEGER NOT NULL DEFAULT 0,
+resendAvailableAt INTEGER NOT NULL DEFAULT 0,
+attempts INTEGER NOT NULL DEFAULT 0,
+createdAt INTEGER NOT NULL,
+updatedAt INTEGER NOT NULL
+)`);
+    await dbRun(`ALTER TABLE EmailOtps ADD COLUMN otpHash TEXT`).catch(
+      (err) => {
+        if (!/duplicate column name/i.test(err.message)) throw err;
+      },
+    );
+    await dbRun(
+      `ALTER TABLE EmailOtps ADD COLUMN resendAvailableAt INTEGER NOT NULL DEFAULT 0`,
     ).catch((err) => {
       if (!/duplicate column name/i.test(err.message)) throw err;
     });
+    await dbRun(
+      `ALTER TABLE EmailOtps ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`,
+    ).catch((err) => {
+      if (!/duplicate column name/i.test(err.message)) throw err;
+    });
+    await dbRun(`DELETE FROM EmailOtps WHERE expiresAt <= ?`, [Date.now()]);
+    await dbRun(`CREATE TABLE IF NOT EXISTS Notebooks (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+title TEXT,
+description TEXT,
+department TEXT,
+course_code TEXT,
+author_id INTEGER,
+file_url TEXT,
+created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+    await dbRun(`ALTER TABLE Notebooks ADD COLUMN course_code TEXT`).catch(
+      (err) => {
+        if (!/duplicate column name/i.test(err.message)) throw err;
+      },
+    );
     await dbRun(`CREATE TABLE IF NOT EXISTS Likes (
- user_id INTEGER, notebook_id INTEGER,
- PRIMARY KEY (user_id, notebook_id)
- )`);
+user_id INTEGER,
+notebook_id INTEGER,
+PRIMARY KEY (user_id, notebook_id)
+)`);
     await dbRun(`CREATE TABLE IF NOT EXISTS Swapps (
- id INTEGER PRIMARY KEY AUTOINCREMENT,
- sender_id INTEGER, receiver_id INTEGER, status TEXT
- )`);
-    console.log("✅ Database initialized!");
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+sender_id INTEGER,
+receiver_id INTEGER,
+status TEXT
+)`);
+    console.log("Database initialized.");
     return true;
   } catch (err) {
-    console.error("❌ Database initialization failed:", err.message);
+    console.error("Database initialization failed:", err.message);
     return false;
   }
 }
 
-// ─── OTP ──────────────────────────────────────────────────────────────────────
 app.post("/api/send-otp", async (req, res) => {
-  const email = (req.body.email || "").trim().toLowerCase();
-  if (!/^\d+@usc\.edu\.ph$/i.test(email)) {
+  const email = normalizeEmail(req.body.email);
+  if (!isValidSchoolEmail(email)) {
     return res.json({
       success: false,
       message: "Email must be in the format: numbers@usc.edu.ph",
     });
   }
 
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
-  otpStore.set(email, { otp, expires: Date.now() + 10 * 60 * 1000, verified: false });
+  if (!transporter || !mailFromAddress) {
+    return res.status(500).json({
+      success: false,
+      message: "Email verification is not configured on this server yet.",
+    });
+  }
 
   try {
+    const existingUser = await dbGet(`SELECT id FROM Users WHERE email = ?`, [
+      email,
+    ]);
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "That school email is already registered.",
+      });
+    }
+
+    const existingOtp = await dbGet(`SELECT * FROM EmailOtps WHERE email = ?`, [
+      email,
+    ]);
+    const resendWaitSeconds = secondsUntilResend(existingOtp);
+    if (resendWaitSeconds > 0) {
+      return res.status(429).json({
+        success: false,
+        message: `Please wait ${resendWaitSeconds}s before requesting another code.`,
+        retryAfterSeconds: resendWaitSeconds,
+      });
+    }
+
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const now = Date.now();
+    await dbRun(
+      `INSERT INTO EmailOtps (email, otp, otpHash, expiresAt, verified, resendAvailableAt, attempts, createdAt, updatedAt)
+       VALUES (?, '', ?, ?, 0, ?, 0, ?, ?)
+       ON CONFLICT(email) DO UPDATE SET
+         otp='',
+         otpHash=excluded.otpHash,
+         expiresAt=excluded.expiresAt,
+         verified=0,
+         resendAvailableAt=excluded.resendAvailableAt,
+         attempts=0,
+         updatedAt=excluded.updatedAt`,
+      [
+        email,
+        hashOtp(otp),
+        now + OTP_TTL_MS,
+        now + OTP_RESEND_COOLDOWN_MS,
+        now,
+        now,
+      ],
+    );
+
     await transporter.sendMail({
-      from: `"SWAPPR" <${process.env.EMAIL_USER}>`,
+      from: `"SWAPPR" <${mailFromAddress}>`,
       to: email,
       subject: "Your SWAPPR verification code",
       html: `
@@ -108,128 +279,224 @@ app.post("/api/send-otp", async (req, res) => {
           <p style="color:#6b7280;font-size:13px;margin:0;">Valid for 10 minutes. Do not share this code with anyone.</p>
         </div>`,
     });
+
     console.log(`[OTP] Sent to ${email}`);
     res.json({ success: true });
   } catch (err) {
     console.error("[OTP] Email send failed:", err.message);
-    res.json({ success: false, message: "Failed to send email. Check server email config." });
+    await dbRun(`DELETE FROM EmailOtps WHERE email = ?`, [email]).catch(
+      () => {},
+    );
+    res.json({
+      success: false,
+      message: "Failed to send email. Check server email config.",
+    });
   }
 });
 
-app.post("/api/verify-otp", (req, res) => {
-  const email = (req.body.email || "").trim().toLowerCase();
+app.post("/api/verify-otp", async (req, res) => {
+  const email = normalizeEmail(req.body.email);
   const otp = String(req.body.otp || "").trim();
-  const record = otpStore.get(email);
 
-  if (!record) {
-    return res.json({ success: false, message: "No OTP found. Request a new one." });
-  }
-  if (Date.now() > record.expires) {
-    otpStore.delete(email);
-    return res.json({ success: false, message: "OTP expired. Request a new one." });
-  }
-  if (record.otp !== otp) {
-    return res.json({ success: false, message: "Incorrect code. Try again." });
+  if (!/^\d{6}$/.test(otp)) {
+    return res.status(400).json({
+      success: false,
+      message: "Enter the 6-digit verification code.",
+    });
   }
 
-  record.verified = true;
-  res.json({ success: true });
+  try {
+    const record = await dbGet(`SELECT * FROM EmailOtps WHERE email = ?`, [
+      email,
+    ]);
+    if (!record) {
+      return res.json({
+        success: false,
+        message: "No OTP found. Request a new one.",
+      });
+    }
+    if (Date.now() > record.expiresAt) {
+      await dbRun(`DELETE FROM EmailOtps WHERE email = ?`, [email]).catch(
+        () => {},
+      );
+      return res.json({
+        success: false,
+        message: "OTP expired. Request a new one.",
+      });
+    }
+    if (record.attempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many incorrect attempts. Request a new code.",
+      });
+    }
+
+    if (!verifyOtpHash(otp, record.otpHash)) {
+      const attempts = record.attempts + 1;
+      await dbRun(
+        `UPDATE EmailOtps SET attempts = ?, updatedAt = ? WHERE email = ?`,
+        [attempts, Date.now(), email],
+      );
+
+      if (attempts >= OTP_MAX_ATTEMPTS) {
+        return res.status(429).json({
+          success: false,
+          message: "Too many incorrect attempts. Request a new code.",
+        });
+      }
+
+      const remainingAttempts = OTP_MAX_ATTEMPTS - attempts;
+      return res.json({
+        success: false,
+        message: `Incorrect code. ${remainingAttempts} attempt${remainingAttempts === 1 ? "" : "s"} left.`,
+      });
+    }
+
+    await dbRun(
+      `UPDATE EmailOtps SET verified = 1, attempts = 0, updatedAt = ? WHERE email = ?`,
+      [Date.now(), email],
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[OTP] Verification lookup failed:", err.message);
+    res.status(500).json({ success: false, message: "Database error." });
+  }
 });
 
-// ─── AUTH ─────────────────────────────────────────────────────────────────
-app.post("/api/register", (req, res) => {
+app.post("/api/register", async (req, res) => {
   console.log("[REGISTER] Request received:", req.body);
 
-  const { name, username, password, course, department, yearLevel, email } = req.body;
-  const cleanEmail = (email || "").trim().toLowerCase();
+  const {
+    name,
+    username,
+    password,
+    course,
+    department,
+    yearLevel,
+    studentId,
+    email,
+  } = req.body;
+  const cleanEmail = normalizeEmail(email);
 
-  // 1. Require verified OTP
-  const otpRecord = otpStore.get(cleanEmail);
-  if (!cleanEmail || !otpRecord?.verified) {
-    return res.status(400).json({ success: false, message: "Email not verified. Complete OTP verification first." });
+  if (!name || !username || !password || !studentId) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing required fields",
+    });
   }
 
-  // 2. Validate core fields
-  if (!name || !username || !password) {
-    console.log("❌ REJECTED - Missing fields:", { name, username, password });
-    return res
-      .status(400)
-      .json({ success: false, message: "Missing required fields" });
+  if (!/^[0-9]+$/.test(studentId)) {
+    return res.status(400).json({
+      success: false,
+      message: "Student ID must contain numbers only.",
+    });
   }
 
-  // 2. Check if username exists
-  db.get(
-    `SELECT id FROM Users WHERE username = ?`,
-    [username],
-    (err, existingUser) => {
-      if (err)
-        return res
-          .status(500)
-          .json({ success: false, message: "Database error" });
-      if (existingUser)
-        return res
-          .status(400)
-          .json({ success: false, message: "Username already taken" });
+  if (!isValidSchoolEmail(cleanEmail)) {
+    return res.status(400).json({
+      success: false,
+      message: "Email must be in the format: numbers@usc.edu.ph",
+    });
+  }
 
-      // 3. Mapping Frontend to Backend fields
-      // Your HTML sends 'course', but your DB has 'course' AND 'department'
-      const finalDept = department || course || "";
-      const finalCourse = course || "";
-      // Your HTML sends 'yearLevel' as the StudentID value
-      const finalYear = yearLevel || "";
+  try {
+    const otpRecord = await dbGet(`SELECT * FROM EmailOtps WHERE email = ?`, [
+      cleanEmail,
+    ]);
+    if (!otpRecord || !otpRecord.verified || Date.now() > otpRecord.expiresAt) {
+      return res.status(400).json({
+        success: false,
+        message: "Email not verified. Complete OTP verification first.",
+      });
+    }
 
-      db.run(
-        `INSERT INTO Users (name, username, password, course, department, yearLevel, email)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [name, username, password, finalCourse, finalDept, finalYear, cleanEmail],
-        function (err) {
-          if (err) {
-            console.error("[REGISTER] Insert error:", err);
-            return res
-              .status(500)
-              .json({ success: false, message: "Registration failed" });
-          }
+    const [existingUsername, existingEmail] = await Promise.all([
+      dbGet(`SELECT id FROM Users WHERE username = ?`, [username]),
+      dbGet(`SELECT id FROM Users WHERE email = ?`, [cleanEmail]),
+    ]);
 
-          // Clean up OTP record after successful registration
-          otpStore.delete(cleanEmail);
+    if (existingUsername) {
+      return res.status(400).json({
+        success: false,
+        message: "Username already taken",
+      });
+    }
 
-          console.log("[REGISTER] Success - User created ID:", this.lastID);
-          res.status(201).json({
-            success: true,
-            userId: this.lastID,
-            user: { id: this.lastID, name, username, course: finalCourse },
-          });
-        },
-      );
-    },
-  );
+    if (existingEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "That school email is already registered.",
+      });
+    }
+
+    const finalDept = department || course || "";
+    const finalCourse = course || "";
+    const finalYear = yearLevel || "";
+    const hashedPassword = hashPassword(password);
+
+    const result = await dbRun(
+      `INSERT INTO Users (name, username, password, course, department, yearLevel, email, studentId)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name,
+        username,
+        hashedPassword,
+        finalCourse,
+        finalDept,
+        finalYear,
+        cleanEmail,
+        studentId,
+      ],
+    );
+
+    await dbRun(`DELETE FROM EmailOtps WHERE email = ?`, [cleanEmail]).catch(
+      () => {},
+    );
+
+    res.status(201).json({
+      success: true,
+      userId: result.lastID,
+      user: {
+        id: result.lastID,
+        name,
+        username,
+        course: finalCourse,
+        studentId,
+      },
+    });
+  } catch (err) {
+    console.error("[REGISTER] Insert error:", err);
+    res.status(500).json({ success: false, message: "Registration failed" });
+  }
 });
 
-// ─── LOGIN ──────────────────────────────────────────────────────────
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
 
-  // 1. Find the user in the database
   db.get(`SELECT * FROM Users WHERE username = ?`, [username], (err, user) => {
     if (err) {
       return res.status(500).json({ success: false, message: "Server error" });
     }
-
-    // 2. Check if user exists
     if (!user) {
       return res
         .status(401)
         .json({ success: false, message: "User not found" });
     }
-
-    // 3. Check if password matches
-    if (user.password !== password) {
+    if (!verifyPassword(password, user.password)) {
       return res
         .status(401)
         .json({ success: false, message: "Incorrect password" });
     }
 
-    // 4. Success!
+    if (!String(user.password || "").startsWith(`${HASH_PREFIX}$`)) {
+      const upgradedPassword = hashPassword(password);
+      db.run(
+        `UPDATE Users SET password = ? WHERE id = ?`,
+        [upgradedPassword, user.id],
+        () => {},
+      );
+    }
+
     res.json({
       success: true,
       user: {
@@ -242,7 +509,6 @@ app.post("/api/login", (req, res) => {
   });
 });
 
-// ─── PROFILE ──────────────────────────────────────────────────────────────
 app.get("/api/profile/:username", (req, res) => {
   db.get(
     `SELECT * FROM Users WHERE username=?`,
@@ -256,8 +522,10 @@ app.get("/api/profile/:username", (req, res) => {
       FROM Notebooks LEFT JOIN Likes ON Notebooks.id = Likes.notebook_id
       WHERE author_id=? GROUP BY Notebooks.id ORDER BY created_at DESC`,
         [user.id],
-        (err, notebooks) => {
-          if (err) return res.json({ success: false, message: err.message });
+        (notebookErr, notebooks) => {
+          if (notebookErr) {
+            return res.json({ success: false, message: notebookErr.message });
+          }
 
           db.all(
             `SELECT CASE WHEN sender_id=? THEN r.username ELSE s.username END AS matched_user
@@ -266,8 +534,12 @@ app.get("/api/profile/:username", (req, res) => {
             JOIN Users r ON Swapps.receiver_id = r.id
             WHERE (sender_id=? OR receiver_id=?) AND status='accepted'`,
             [user.id, user.id, user.id],
-            (err, matchRows) => {
-              const matches = (matchRows || []).map((r) => r.matched_user);
+            (matchErr, matchRows) => {
+              if (matchErr) {
+                return res.json({ success: false, message: matchErr.message });
+              }
+
+              const matches = (matchRows || []).map((row) => row.matched_user);
               const profile = {
                 id: user.id,
                 name: user.name,
@@ -276,10 +548,11 @@ app.get("/api/profile/:username", (req, res) => {
                 course: user.course || user.department || "",
                 department: user.department || user.course || "",
                 yearLevel: user.yearLevel || "",
-                studentId: user.yearLevel || "",
+                studentId: user.studentId || "",
                 portfolios: notebooks,
                 matches,
               };
+
               res.json({
                 success: true,
                 profile,
@@ -292,7 +565,6 @@ app.get("/api/profile/:username", (req, res) => {
   );
 });
 
-// FIX: Missing PATCH /api/profile endpoint
 app.patch("/api/profile", (req, res) => {
   const { username, name, bio, course, department, yearLevel } = req.body;
   const dept = department || course || "";
@@ -300,7 +572,7 @@ app.patch("/api/profile", (req, res) => {
   db.run(
     `UPDATE Users SET name=?, bio=?, course=?, department=?, yearLevel=? WHERE username=?`,
     [name, bio, crs, dept, yearLevel, username],
-    function (err) {
+    function onUpdate(err) {
       if (err) return res.json({ success: false, message: err.message });
       res.json({
         success: true,
@@ -310,21 +582,20 @@ app.patch("/api/profile", (req, res) => {
   );
 });
 
-// ─── DEPARTMENTS ──────────────────────────────────────────────────────────
 app.get("/api/departments", (req, res) => {
   coursesDb.all(
     `SELECT DISTINCT department_reserved FROM courses WHERE department_reserved IS NOT NULL ORDER BY department_reserved`,
     [],
     (err, rows) => {
       if (err) return res.json({ success: false, message: err.message });
-      const departments = cleanDepartments(rows.map((r) => r.department_reserved));
+      const departments = cleanDepartments(
+        rows.map((row) => row.department_reserved),
+      );
       res.json({ success: true, departments });
-    }
+    },
   );
 });
 
-// ─── NOTEBOOKS ────────────────────────────────────────────────────────────
-// --- SUBJECTS (filtered by the user's registered program) -------------------
 app.get("/api/subjects", (req, res) => {
   const course = req.query.course || "";
   coursesDb.all(
@@ -333,21 +604,23 @@ app.get("/api/subjects", (req, res) => {
     (err, rows) => {
       if (err) return res.json({ success: false, message: err.message });
       const subjects =
-      course === "ALL"
-        ? filterSubjects(rows || [], [])
-        : subjectsForCourse(rows || [], course);
-      // Return all program subjects (dropdown needs them). Also report which
-      // codes have notebooks so the cards view can hide empty ones client-side.
+        course === "ALL"
+          ? filterSubjects(rows || [], [])
+          : subjectsForCourse(rows || [], course);
+
       db.all(
         `SELECT DISTINCT course_code FROM Notebooks WHERE course_code IS NOT NULL AND TRIM(course_code) != ''`,
         [],
-        (err2, nbRows) => {
-          if (err2) return res.json({ success: false, message: err2.message });
-          const codesWithNotebooks = (nbRows || []).map((r) => String(r.course_code).trim());
+        (nbErr, nbRows) => {
+          if (nbErr)
+            return res.json({ success: false, message: nbErr.message });
+          const codesWithNotebooks = (nbRows || []).map((row) =>
+            String(row.course_code).trim(),
+          );
           res.json({ success: true, subjects, codesWithNotebooks });
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -396,8 +669,15 @@ app.get("/api/portfolios/recent", (req, res) => {
 app.post("/api/portfolios", (req, res) => {
   console.log("[CREATE NOTEBOOK]", req.body);
 
-  const { title, description, department, courseCode, author, username, fileUrl } =
-    req.body;
+  const {
+    title,
+    description,
+    department,
+    courseCode,
+    author,
+    username,
+    fileUrl,
+  } = req.body;
   const actualAuthor = author || username;
 
   if (!title || !actualAuthor) {
@@ -419,7 +699,6 @@ app.post("/api/portfolios", (req, res) => {
       }
 
       if (!user) {
-        console.log("User not found:", actualAuthor);
         return res
           .status(404)
           .json({ success: false, message: "User not found" });
@@ -436,15 +715,14 @@ app.post("/api/portfolios", (req, res) => {
           user.id,
           fileUrl || null,
         ],
-        function (err) {
-          if (err) {
-            console.error("Insert error:", err);
+        function onInsert(insertErr) {
+          if (insertErr) {
+            console.error("Insert error:", insertErr);
             return res
               .status(500)
-              .json({ success: false, message: err.message });
+              .json({ success: false, message: insertErr.message });
           }
 
-          console.log("Notebook created with ID:", this.lastID);
           res.json({ success: true, id: this.lastID });
         },
       );
@@ -471,7 +749,6 @@ app.put("/api/portfolios/:id", (req, res) => {
   );
 });
 
-// FIX: supports both delete-by-id and delete-by-title+author
 app.post("/api/portfolios/delete", (req, res) => {
   const { id, title, author } = req.body;
   if (id) {
@@ -485,10 +762,13 @@ app.post("/api/portfolios/delete", (req, res) => {
 WHERE Notebooks.title=? AND Users.username=?`,
       [title, author],
       (err, row) => {
-        if (err || !row)
+        if (err || !row) {
           return res.json({ success: false, message: "Notebook not found" });
-        db.run(`DELETE FROM Notebooks WHERE id=?`, [row.id], (err) => {
-          if (err) return res.json({ success: false, message: err.message });
+        }
+        db.run(`DELETE FROM Notebooks WHERE id=?`, [row.id], (deleteErr) => {
+          if (deleteErr) {
+            return res.json({ success: false, message: deleteErr.message });
+          }
           res.json({ success: true });
         });
       },
@@ -505,26 +785,31 @@ app.post("/api/portfolios/like", (req, res) => {
     db.run(
       `INSERT INTO Likes (user_id, notebook_id) VALUES (?,?)`,
       [user.id, notebookId],
-      (err) => {
-        if (err) return res.json({ success: false, message: "Already liked" });
+      (likeErr) => {
+        if (likeErr) {
+          return res.json({ success: false, message: "Already liked" });
+        }
         res.json({ success: true });
       },
     );
   });
 });
 
-// ─── SWAPPS ───────────────────────────────────────────────────────────────
 app.post("/api/swapps", (req, res) => {
   const { from, to } = req.body;
   db.get(`SELECT id FROM Users WHERE username=?`, [from], (err, sender) => {
-    db.get(`SELECT id FROM Users WHERE username=?`, [to], (err, receiver) => {
-      if (!sender || !receiver) return res.json({ success: false });
-      db.run(
-        `INSERT INTO Swapps (sender_id, receiver_id, status) VALUES (?,?,'pending')`,
-        [sender.id, receiver.id],
-        () => res.json({ success: true }),
-      );
-    });
+    db.get(
+      `SELECT id FROM Users WHERE username=?`,
+      [to],
+      (receiverErr, receiver) => {
+        if (!sender || !receiver) return res.json({ success: false });
+        db.run(
+          `INSERT INTO Swapps (sender_id, receiver_id, status) VALUES (?,?,'pending')`,
+          [sender.id, receiver.id],
+          () => res.json({ success: true }),
+        );
+      },
+    );
   });
 });
 
@@ -541,8 +826,10 @@ JOIN Users s ON Swapps.sender_id = s.id
 JOIN Users r ON Swapps.receiver_id = r.id
 WHERE sender_id=? OR receiver_id=?`,
         [user.id, user.id],
-        (err, swapps) => {
-          if (err) return res.json({ success: false, message: err.message });
+        (swappErr, swapps) => {
+          if (swappErr) {
+            return res.json({ success: false, message: swappErr.message });
+          }
           res.json({ swapps: swapps || [] });
         },
       );
@@ -561,15 +848,14 @@ app.put("/api/swapps/:id/respond", (req, res) => {
   );
 });
 
-// ─── START ────────────────────────────────────────────────────────────────
-// ✅ WAIT for database to be ready before starting server
 initializeDatabase().then((success) => {
   if (success) {
-    app.listen(PORT, () =>
-      console.log(`🚀 SWAPPR running at http://localhost:${PORT}`),
-    );
+    app.listen(PORT, HOST, () => {
+      console.log(`SWAPPR running on http://${HOST}:${PORT}`);
+      console.log(`This is also localhost:3000 if you are running it locally.`);
+    });
   } else {
-    console.error("❌ Failed to initialize database. Exiting.");
+    console.error("Failed to initialize database. Exiting.");
     process.exit(1);
   }
 });

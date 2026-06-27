@@ -65,7 +65,41 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your system.
    npm start
    ```
 
-5. Open your browser and navigate to `http://localhost:3000`.
+5. Open your browser and navigate to `http://localhost:3000` unless you changed `PORT`.
+
+### Email OTP configuration
+
+Registration now depends on SMTP-backed email verification. Create a local `.env`
+file before starting the server.
+
+Preferred provider-agnostic SMTP variables:
+
+```env
+PORT=3000
+HOST=127.0.0.1
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-smtp-user
+SMTP_PASS=your-smtp-password
+SMTP_FROM=no-reply@example.com
+```
+
+Legacy Gmail variables still work as a fallback:
+
+```env
+EMAIL_USER=your-gmail-address@gmail.com
+EMAIL_PASS=your-app-password
+```
+
+Notes:
+
+- `SMTP_FROM` is the sender address shown in OTP emails.
+- One USC email can only register one account.
+- `studentId` is stored separately from `yearLevel`.
+- OTP codes are hashed in SQLite, expire after 10 minutes, and use server-side
+  resend/attempt limits.
+- `HOST=127.0.0.1` keeps the app local-only by default during development.
 
 ### Testing
 

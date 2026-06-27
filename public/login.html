@@ -514,6 +514,9 @@
           } else {
             errorEl.textContent = data.message || "Failed to resend.";
             errorEl.style.display = "block";
+            if (data.retryAfterSeconds) {
+              startResendTimer(data.retryAfterSeconds);
+            }
           }
         } catch {
           errorEl.textContent = "Server error. Please try again.";
@@ -1055,7 +1058,7 @@
           if (data.success) {
             // Store form data and email for use after OTP verification
             verifiedEmail = email;
-            pendingFormData = { name, yearLevel: studentId, course, username, password };
+            pendingFormData = { name, studentId, course, username, password };
 
             document.getElementById("otpEmailLabel").textContent = email;
             document.querySelectorAll(".otp-box").forEach((b) => (b.value = ""));
@@ -1065,6 +1068,9 @@
           } else {
             errorEl.textContent = data.message || "Failed to send code. Try again.";
             errorEl.style.display = "block";
+            if (data.retryAfterSeconds) {
+              startResendTimer(data.retryAfterSeconds);
+            }
           }
         } catch (err) {
           console.error("OTP send error:", err);
