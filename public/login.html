@@ -145,12 +145,28 @@
           </button>
           <h2 class="modal-title">Create Account</h2>
           <p class="modal-subtitle">Join SWAPPR and start collaborating</p>
+
+          <!-- Step indicator -->
+          <div style="display:flex;align-items:center;gap:6px;margin-top:12px;justify-content:center;">
+            <div id="stepDot1" style="width:20px;height:8px;border-radius:4px;background:#6d28d9;transition:all .3s;"></div>
+            <div id="stepDot2" style="width:8px;height:8px;border-radius:50%;background:#d1d5db;transition:all .3s;"></div>
+          </div>
         </div>
         <div class="modal-body">
           <div id="registerError" class="error-msg"></div>
           <div id="registerSuccess" class="success-msg"></div>
 
+          <!-- ── STEP 1: Full registration form ── -->
           <form id="registerForm" onsubmit="handleRegister(event)">
+            <input
+              type="email"
+              id="regEmail"
+              placeholder="USC Email (e.g. 23200114@usc.edu.ph)"
+              class="input-field"
+              autocomplete="email"
+              style="margin-bottom:12px;"
+              required
+            />
             <div class="form-row">
               <input
                 type="text"
@@ -351,12 +367,63 @@
               minlength="4"
             />
             <button type="submit" class="btn-signup" id="registerBtn">
-              Sign Up
+              Continue
             </button>
           </form>
+
+          <!-- ── STEP 2: OTP verification ── -->
+          <div id="regStep2" style="display:none;">
+            <p style="font-size:13px;color:#6b7280;margin-bottom:4px;">Enter the 6-digit code sent to</p>
+            <p id="otpEmailLabel" style="font-size:13px;font-weight:700;color:#6d28d9;margin-bottom:20px;word-break:break-all;"></p>
+
+            <div id="otpBoxes" style="display:flex;gap:8px;justify-content:center;margin-bottom:20px;">
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]" />
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]" />
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]" />
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]" />
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]" />
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]" />
+            </div>
+
+            <button type="button" id="verifyOtpBtn" class="btn-signup" onclick="handleVerifyOtp()" style="margin-bottom:12px;">
+              Verify &amp; Create Account
+            </button>
+            <div style="text-align:center;">
+              <button type="button" id="resendBtn" onclick="handleResend()" style="background:none;border:none;font-size:13px;color:#6d28d9;cursor:pointer;text-decoration:underline;">
+                Resend code
+              </button>
+              <span id="resendTimer" style="font-size:13px;color:#9ca3af;display:none;"></span>
+            </div>
+            <div style="text-align:center;margin-top:10px;">
+              <button type="button" onclick="showRegStep(1)" style="background:none;border:none;font-size:13px;color:#9ca3af;cursor:pointer;">
+                ← Back to form
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
+
+    <style>
+      .otp-box {
+        width: 44px;
+        height: 52px;
+        text-align: center;
+        font-size: 22px;
+        font-weight: 700;
+        border: 2px solid #d1d5db;
+        border-radius: 10px;
+        outline: none;
+        color: #4f46e5;
+        background: #f9fafb;
+        transition: border-color 0.2s;
+      }
+      .otp-box:focus {
+        border-color: #6d28d9;
+        background: #fff;
+      }
+    </style>
 
     <script>
       // Initialize Lucide icons
@@ -365,6 +432,160 @@
       // Check if already logged in
       if (sessionStorage.getItem("currentUser")) {
         window.location.href = "index.html";
+      }
+
+      // ── OTP box auto-advance ──────────────────────────────────────────────
+      document.addEventListener("DOMContentLoaded", () => {
+        const boxes = document.querySelectorAll(".otp-box");
+        boxes.forEach((box, i) => {
+          box.addEventListener("input", () => {
+            box.value = box.value.replace(/\D/g, "").slice(-1);
+            if (box.value && i < boxes.length - 1) boxes[i + 1].focus();
+          });
+          box.addEventListener("keydown", (e) => {
+            if (e.key === "Backspace" && !box.value && i > 0) boxes[i - 1].focus();
+          });
+          box.addEventListener("paste", (e) => {
+            e.preventDefault();
+            const digits = (e.clipboardData.getData("text") || "").replace(/\D/g, "").slice(0, 6);
+            [...digits].forEach((d, idx) => { if (boxes[idx]) boxes[idx].value = d; });
+            if (boxes[Math.min(digits.length, 5)]) boxes[Math.min(digits.length, 5)].focus();
+          });
+        });
+      });
+
+      // ── Registration step state ───────────────────────────────────────────
+      let verifiedEmail = "";
+      let pendingFormData = null;
+      let resendInterval = null;
+
+      function showRegStep(step) {
+        document.getElementById("registerForm").style.display = step === 1 ? "" : "none";
+        document.getElementById("regStep2").style.display = step === 2 ? "" : "none";
+        document.getElementById("registerError").style.display = "none";
+        document.getElementById("registerSuccess").style.display = "none";
+        const d1 = document.getElementById("stepDot1");
+        const d2 = document.getElementById("stepDot2");
+        if (step === 1) {
+          d1.style.cssText = "width:20px;height:8px;border-radius:4px;background:#6d28d9;transition:all .3s;";
+          d2.style.cssText = "width:8px;height:8px;border-radius:50%;background:#d1d5db;transition:all .3s;";
+        } else {
+          d1.style.cssText = "width:8px;height:8px;border-radius:50%;background:#6d28d9;transition:all .3s;";
+          d2.style.cssText = "width:20px;height:8px;border-radius:4px;background:#6d28d9;transition:all .3s;";
+        }
+      }
+
+      function startResendTimer(seconds) {
+        const btn = document.getElementById("resendBtn");
+        const timer = document.getElementById("resendTimer");
+        btn.style.display = "none";
+        timer.style.display = "";
+        let remaining = seconds;
+        timer.textContent = `Resend in ${remaining}s`;
+        if (resendInterval) clearInterval(resendInterval);
+        resendInterval = setInterval(() => {
+          remaining--;
+          if (remaining <= 0) {
+            clearInterval(resendInterval);
+            timer.style.display = "none";
+            btn.style.display = "";
+          } else {
+            timer.textContent = `Resend in ${remaining}s`;
+          }
+        }, 1000);
+      }
+
+      async function handleResend() {
+        const errorEl = document.getElementById("registerError");
+        const btn = document.getElementById("resendBtn");
+        btn.disabled = true;
+        errorEl.style.display = "none";
+        try {
+          const res = await fetch("/api/send-otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: verifiedEmail }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            document.querySelectorAll(".otp-box").forEach((b) => (b.value = ""));
+            startResendTimer(60);
+            setTimeout(() => document.querySelector(".otp-box")?.focus(), 100);
+          } else {
+            errorEl.textContent = data.message || "Failed to resend.";
+            errorEl.style.display = "block";
+          }
+        } catch {
+          errorEl.textContent = "Server error. Please try again.";
+          errorEl.style.display = "block";
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      async function handleVerifyOtp() {
+        const otp = [...document.querySelectorAll(".otp-box")].map((b) => b.value).join("");
+        const errorEl = document.getElementById("registerError");
+        const successEl = document.getElementById("registerSuccess");
+        const btn = document.getElementById("verifyOtpBtn");
+
+        if (otp.length !== 6) {
+          errorEl.textContent = "Enter all 6 digits.";
+          errorEl.style.display = "block";
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Verifying…";
+        errorEl.style.display = "none";
+
+        try {
+          // Verify the OTP
+          const vRes = await fetch("/api/verify-otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: verifiedEmail, otp }),
+          });
+          const vData = await vRes.json();
+          if (!vData.success) {
+            errorEl.textContent = vData.message || "Incorrect code.";
+            errorEl.style.display = "block";
+            btn.disabled = false;
+            btn.textContent = "Verify & Create Account";
+            return;
+          }
+
+          // OTP good — now register
+          const rRes = await fetch("/api/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...pendingFormData, email: verifiedEmail }),
+          });
+          const rData = await rRes.json();
+
+          if (rData.success) {
+            if (rData.user?.username) {
+              sessionStorage.setItem("currentUser", JSON.stringify(rData.user));
+              successEl.textContent = "Account created! Redirecting…";
+              successEl.style.display = "block";
+              setTimeout(() => { window.location.href = "index.html"; }, 1000);
+            } else {
+              successEl.textContent = "Account created! You can now log in.";
+              successEl.style.display = "block";
+              setTimeout(closeRegisterModal, 2000);
+            }
+          } else {
+            errorEl.textContent = rData.message || "Registration failed.";
+            errorEl.style.display = "block";
+            btn.disabled = false;
+            btn.textContent = "Verify & Create Account";
+          }
+        } catch {
+          errorEl.textContent = "Server error. Please try again.";
+          errorEl.style.display = "block";
+          btn.disabled = false;
+          btn.textContent = "Verify & Create Account";
+        }
       }
 
       // Custom dropdown for regCourse with click-open typing support
@@ -707,19 +928,14 @@
       function openRegisterModal() {
         const modal = document.getElementById("registerModal");
         modal.classList.add("active");
-        document.getElementById("registerError").style.display = "none";
-        document.getElementById("registerSuccess").style.display = "none";
-        // Clear form
         document.getElementById("registerForm").reset();
-
-        // Focus the course button so custom type-to-select works immediately.
-        requestAnimationFrame(() => {
-          const courseButton = document.getElementById("regCourseButton");
-          if (courseButton) courseButton.focus();
-        });
-
-        // Reinitialize icons after modal opens
-        setTimeout(() => lucide.createIcons(), 50);
+        document.getElementById("regEmail").value = "";
+        verifiedEmail = "";
+        showRegStep(1);
+        setTimeout(() => {
+          lucide.createIcons();
+          document.getElementById("regEmail").focus();
+        }, 50);
       }
 
       function closeRegisterModal() {
@@ -786,20 +1002,26 @@
         }
       }
 
-      // Register handler
+      // Register handler — Step 1: validate form, send OTP, advance to step 2
       async function handleRegister(e) {
         e.preventDefault();
+        const email = document.getElementById("regEmail").value.trim();
         const name = document.getElementById("regName").value.trim();
         const studentId = document.getElementById("regStudentId").value.trim();
         const course = document.getElementById("regCourse").value.trim();
         const username = document.getElementById("regUsername").value.trim();
         const password = document.getElementById("regPassword").value.trim();
         const errorEl = document.getElementById("registerError");
-        const successEl = document.getElementById("registerSuccess");
         const registerBtn = document.getElementById("registerBtn");
 
         errorEl.style.display = "none";
-        successEl.style.display = "none";
+
+        // Validate USC email
+        if (!/^\d+@usc\.edu\.ph$/i.test(email)) {
+          errorEl.textContent = "Email must be in the format: numbers@usc.edu.ph";
+          errorEl.style.display = "block";
+          return;
+        }
 
         if (!name || !studentId || !course || !username || !password) {
           errorEl.textContent = "Please fill in all fields.";
@@ -819,57 +1041,38 @@
           return;
         }
 
-        // Disable button during request
         registerBtn.disabled = true;
-        registerBtn.textContent = "Creating account...";
+        registerBtn.textContent = "Sending code…";
 
         try {
-          const res = await fetch("/api/register", {
+          const res = await fetch("/api/send-otp", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name,
-              course,
-              username,
-              password,
-              yearLevel: studentId || "",
-            }),
+            body: JSON.stringify({ email }),
           });
           const data = await res.json();
 
           if (data.success) {
-            // Clear form
-            document.getElementById("registerForm").reset();
+            // Store form data and email for use after OTP verification
+            verifiedEmail = email;
+            pendingFormData = { name, yearLevel: studentId, course, username, password };
 
-            if (data.user && data.user.username) {
-              sessionStorage.setItem("currentUser", JSON.stringify(data.user));
-              successEl.textContent = "Registration successful! Redirecting...";
-              successEl.style.display = "block";
-              setTimeout(() => {
-                window.location.href = "index.html";
-              }, 1000);
-            } else {
-              successEl.textContent =
-                "Registration successful! You can now log in.";
-              successEl.style.display = "block";
-              setTimeout(() => {
-                closeRegisterModal();
-              }, 2000);
-            }
+            document.getElementById("otpEmailLabel").textContent = email;
+            document.querySelectorAll(".otp-box").forEach((b) => (b.value = ""));
+            showRegStep(2);
+            startResendTimer(60);
+            setTimeout(() => document.querySelector(".otp-box")?.focus(), 100);
           } else {
-            errorEl.textContent =
-              data.message ||
-              "Registration failed. Username may already exist.";
+            errorEl.textContent = data.message || "Failed to send code. Try again.";
             errorEl.style.display = "block";
-            registerBtn.disabled = false;
-            registerBtn.textContent = "Sign Up";
           }
         } catch (err) {
-          console.error("Registration error:", err);
+          console.error("OTP send error:", err);
           errorEl.textContent = "Server error. Please try again.";
           errorEl.style.display = "block";
+        } finally {
           registerBtn.disabled = false;
-          registerBtn.textContent = "Sign Up";
+          registerBtn.textContent = "Continue";
         }
       }
     </script>

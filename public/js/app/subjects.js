@@ -13,9 +13,22 @@
 
   app.loadSubjects = async function loadSubjects() {
     try {
-      const course = app.state.currentUser?.course || "";
-      const data = await app.api.getSubjects(course);
-      app.state.subjects = data.subjects || [];
+      const pref = app.getSubjectPref ? app.getSubjectPref() : { mode: "own" };
+      const useAll = pref.mode === "all" || pref.mode === "custom";
+      const courseParam = useAll
+        ? "ALL"
+        : app.state.currentUser?.course || "";
+
+      const data = await app.api.getSubjects(courseParam);
+      let subjects = data.subjects || [];
+
+      // For custom mode, filter client-side to only the handpicked subject codes
+      if (pref.mode === "custom" && pref.subjects?.length) {
+        const sel = new Set(pref.subjects);
+        subjects = subjects.filter((s) => sel.has(s.code));
+      }
+
+      app.state.subjects = subjects;
       app.state.codesWithNotebooks = new Set(data.codesWithNotebooks || []);
       app.populateSubjectDropdown();
       app.renderNotebooks();
@@ -69,8 +82,14 @@
 
     const sectionSubtitle = document.getElementById("sectionSubtitle");
     if (sectionSubtitle) {
+      const pref = app.getSubjectPref ? app.getSubjectPref() : { mode: "own" };
+      const subtitleMap = {
+        own: "Subjects in your program. Browse shared study resources.",
+        all: "Showing subjects from all departments.",
+        custom: "Showing subjects from your selected departments.",
+      };
       sectionSubtitle.textContent =
-        "Subjects in your program. Browse shared study resources.";
+        subtitleMap[pref.mode] || subtitleMap.own;
     }
 
     if (app.state.subjects.length === 0) {

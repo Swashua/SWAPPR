@@ -1,9 +1,20 @@
+require("dotenv").config();
 console.log("🔥 NEW SQLITE SERVER RUNNING");
 const express = require("express");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
+const nodemailer = require("nodemailer");
 const { cleanDepartments } = require("./lib/cleanDepartments");
-const { subjectsForCourse } = require("./lib/subjects");
+const { subjectsForCourse, filterSubjects } = require("./lib/subjects");
+
+// ─── EMAIL / OTP ──────────────────────────────────────────────────────────────
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+});
+
+// In-memory OTP store: email → { otp, expires, verified }
+const otpStore = new Map();
 
 const app = express();
 const PORT = 3000;
@@ -37,8 +48,11 @@ async function initializeDatabase() {
     await dbRun(`CREATE TABLE IF NOT EXISTS Users (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 name TEXT, username TEXT UNIQUE, password TEXT,
- bio TEXT, course TEXT, department TEXT, yearLevel TEXT
+ bio TEXT, course TEXT, department TEXT, yearLevel TEXT, email TEXT
  )`);
+    await dbRun(`ALTER TABLE Users ADD COLUMN email TEXT`).catch((err) => {
+      if (!/duplicate column name/i.test(err.message)) throw err;
+    });
     await dbRun(`CREATE TABLE IF NOT EXISTS Notebooks (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  title TEXT, description TEXT, department TEXT, course_code TEXT,
@@ -68,16 +82,74 @@ name TEXT, username TEXT UNIQUE, password TEXT,
   }
 }
 
+// ─── OTP ──────────────────────────────────────────────────────────────────────
+app.post("/api/send-otp", async (req, res) => {
+  const email = (req.body.email || "").trim().toLowerCase();
+  if (!/^\d+@usc\.edu\.ph$/i.test(email)) {
+    return res.json({
+      success: false,
+      message: "Email must be in the format: numbers@usc.edu.ph",
+    });
+  }
+
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  otpStore.set(email, { otp, expires: Date.now() + 10 * 60 * 1000, verified: false });
+
+  try {
+    await transporter.sendMail({
+      from: `"SWAPPR" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Your SWAPPR verification code",
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:32px;background:#f5f3ff;border-radius:12px;">
+          <h2 style="color:#6d28d9;margin:0 0 8px;">SWAPPR</h2>
+          <p style="color:#374151;margin:0 0 16px;">Your one-time verification code:</p>
+          <div style="font-size:40px;font-weight:900;letter-spacing:10px;color:#4f46e5;margin:0 0 24px;">${otp}</div>
+          <p style="color:#6b7280;font-size:13px;margin:0;">Valid for 10 minutes. Do not share this code with anyone.</p>
+        </div>`,
+    });
+    console.log(`[OTP] Sent to ${email}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[OTP] Email send failed:", err.message);
+    res.json({ success: false, message: "Failed to send email. Check server email config." });
+  }
+});
+
+app.post("/api/verify-otp", (req, res) => {
+  const email = (req.body.email || "").trim().toLowerCase();
+  const otp = String(req.body.otp || "").trim();
+  const record = otpStore.get(email);
+
+  if (!record) {
+    return res.json({ success: false, message: "No OTP found. Request a new one." });
+  }
+  if (Date.now() > record.expires) {
+    otpStore.delete(email);
+    return res.json({ success: false, message: "OTP expired. Request a new one." });
+  }
+  if (record.otp !== otp) {
+    return res.json({ success: false, message: "Incorrect code. Try again." });
+  }
+
+  record.verified = true;
+  res.json({ success: true });
+});
+
 // ─── AUTH ─────────────────────────────────────────────────────────────────
 app.post("/api/register", (req, res) => {
-  console.log("[REGISTER] Request received:", req.body); // Check the terminal for this!
+  console.log("[REGISTER] Request received:", req.body);
 
-  console.log("DEBUG: Incoming request body keys:", Object.keys(req.body));
-  console.log("DEBUG: Full body:", JSON.stringify(req.body));
+  const { name, username, password, course, department, yearLevel, email } = req.body;
+  const cleanEmail = (email || "").trim().toLowerCase();
 
-  const { name, username, password, course, department, yearLevel } = req.body;
+  // 1. Require verified OTP
+  const otpRecord = otpStore.get(cleanEmail);
+  if (!cleanEmail || !otpRecord?.verified) {
+    return res.status(400).json({ success: false, message: "Email not verified. Complete OTP verification first." });
+  }
 
-  // 1. Updated Validation: Ensure these three core fields exist
+  // 2. Validate core fields
   if (!name || !username || !password) {
     console.log("❌ REJECTED - Missing fields:", { name, username, password });
     return res
@@ -107,9 +179,9 @@ app.post("/api/register", (req, res) => {
       const finalYear = yearLevel || "";
 
       db.run(
-        `INSERT INTO Users (name, username, password, course, department, yearLevel)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-        [name, username, password, finalCourse, finalDept, finalYear],
+        `INSERT INTO Users (name, username, password, course, department, yearLevel, email)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [name, username, password, finalCourse, finalDept, finalYear, cleanEmail],
         function (err) {
           if (err) {
             console.error("[REGISTER] Insert error:", err);
@@ -117,6 +189,9 @@ app.post("/api/register", (req, res) => {
               .status(500)
               .json({ success: false, message: "Registration failed" });
           }
+
+          // Clean up OTP record after successful registration
+          otpStore.delete(cleanEmail);
 
           console.log("[REGISTER] Success - User created ID:", this.lastID);
           res.status(201).json({
@@ -257,7 +332,10 @@ app.get("/api/subjects", (req, res) => {
     [],
     (err, rows) => {
       if (err) return res.json({ success: false, message: err.message });
-      const subjects = subjectsForCourse(rows || [], course);
+      const subjects =
+      course === "ALL"
+        ? filterSubjects(rows || [], [])
+        : subjectsForCourse(rows || [], course);
       // Return all program subjects (dropdown needs them). Also report which
       // codes have notebooks so the cards view can hide empty ones client-side.
       db.all(

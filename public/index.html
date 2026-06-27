@@ -163,6 +163,14 @@
               <i data-lucide="clock" class="w-4 h-4"></i>
               Recently Added
             </a>
+            <button
+              onclick="openSubjectSettings()"
+              class="sidebar-link flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition w-full text-left"
+              title="Choose which departments' subjects to display"
+            >
+              <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+              Subject Filter
+            </button>
           </nav>
         </div>
 
@@ -433,6 +441,94 @@
       </div>
     </div>
 
+    <!-- Subject Settings Modal -->
+    <div
+      id="subjectSettingsModal"
+      class="modal-overlay hidden"
+      onclick="closeSubjectSettings(event)"
+    >
+      <div class="modal-box" style="max-width:520px">
+        <h3
+          class="text-xl font-extrabold mb-1 text-purple-900 dark:text-purple-100 flex items-center gap-2"
+        >
+          <i data-lucide="sliders-horizontal" class="w-5 h-5"></i>
+          Subject Filter
+        </h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">
+          Choose which subjects appear in your feed.
+        </p>
+
+        <div class="space-y-3 mb-5">
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="subjectMode"
+              value="own"
+              class="accent-purple-600 w-4 h-4 mt-0.5 shrink-0"
+            />
+            <div>
+              <p class="text-sm font-semibold text-gray-800 dark:text-purple-100">My department only</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Subjects from your registered program</p>
+            </div>
+          </label>
+
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="subjectMode"
+              value="all"
+              class="accent-purple-600 w-4 h-4 mt-0.5 shrink-0"
+            />
+            <div>
+              <p class="text-sm font-semibold text-gray-800 dark:text-purple-100">All departments</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Every subject from every department</p>
+            </div>
+          </label>
+
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="subjectMode"
+              value="custom"
+              class="accent-purple-600 w-4 h-4 mt-0.5 shrink-0"
+            />
+            <div>
+              <p class="text-sm font-semibold text-gray-800 dark:text-purple-100">Choose subjects</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Handpick exactly which subjects to show</p>
+            </div>
+          </label>
+        </div>
+
+        <!-- Subject picker — drops down when "Choose subjects" is selected -->
+        <div id="subjectCheckboxContainer" class="hidden mb-5">
+          <input
+            id="subjectSearch"
+            type="text"
+            placeholder="Search by code or name…"
+            class="w-full px-3 py-2 mb-2 rounded-lg border border-purple-200 dark:border-purple-500/30 bg-white dark:bg-[#1a1432] text-sm outline-none focus:border-purple-500 transition"
+          />
+          <div
+            id="subjectCheckboxList"
+            class="max-h-72 overflow-y-auto border border-purple-100 dark:border-purple-500/20 rounded-lg p-2 bg-purple-50/60 dark:bg-[#1a1432]"
+          >
+            <!-- populated by subject-settings.js -->
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3">
+          <button
+            onclick="closeSubjectSettings()"
+            class="text-sm font-semibold px-4 py-2 rounded-lg text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition"
+          >
+            Cancel
+          </button>
+          <button onclick="applySubjectSettings()" class="btn-primary">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
@@ -442,6 +538,7 @@
     <script src="js/app/session.js"></script>
     <script src="js/app/theme.js"></script>
     <script src="js/app/pagination-controls.js"></script>
+    <script src="js/app/subject-settings.js"></script>
     <script src="js/app/subjects.js"></script>
     <script src="js/app/swapps.js"></script>
     <script src="js/app/notebooks.js"></script>
