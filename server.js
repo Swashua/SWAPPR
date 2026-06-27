@@ -69,12 +69,20 @@ function createMailTransport() {
     });
   }
 
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  if (
+    process.env.GMAIL_USER &&
+    process.env.GMAIL_CLIENT_ID &&
+    process.env.GMAIL_CLIENT_SECRET &&
+    process.env.GMAIL_REFRESH_TOKEN
+  ) {
     return nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        type: "OAuth2",
+        user: process.env.GMAIL_USER,
+        clientId: process.env.GMAIL_CLIENT_ID,
+        clientSecret: process.env.GMAIL_CLIENT_SECRET,
+        refreshToken: process.env.GMAIL_REFRESH_TOKEN,
       },
     });
   }
@@ -86,6 +94,7 @@ const transporter = createMailTransport();
 const mailFromAddress =
   process.env.SMTP_FROM ||
   process.env.SMTP_USER ||
+  process.env.GMAIL_USER ||
   process.env.EMAIL_USER ||
   "";
 
@@ -244,7 +253,7 @@ app.post("/api/send-otp", async (req, res) => {
       });
     }
 
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otp = String(crypto.randomInt(100000, 1000000));
     const now = Date.now();
     await dbRun(
       `INSERT INTO EmailOtps (email, otp, otpHash, expiresAt, verified, resendAvailableAt, attempts, createdAt, updatedAt)
