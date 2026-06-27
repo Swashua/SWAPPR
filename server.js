@@ -76,7 +76,9 @@ function createMailTransport() {
     process.env.GMAIL_REFRESH_TOKEN
   ) {
     return nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
       auth: {
         type: "OAuth2",
         user: process.env.GMAIL_USER,
@@ -90,12 +92,10 @@ function createMailTransport() {
   return null;
 }
 
-const transporter = createMailTransport();
 const mailFromAddress =
   process.env.SMTP_FROM ||
   process.env.SMTP_USER ||
   process.env.GMAIL_USER ||
-  process.env.EMAIL_USER ||
   "";
 
 app.use(express.static(path.join(__dirname, "public")));
@@ -223,6 +223,7 @@ app.post("/api/send-otp", async (req, res) => {
     });
   }
 
+  const transporter = createMailTransport();
   if (!transporter || !mailFromAddress) {
     return res.status(500).json({
       success: false,
