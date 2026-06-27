@@ -62,19 +62,21 @@
   };
 
   app.updateRequestBadge = function updateRequestBadge() {
-    const badge = document.getElementById("requestsBadge");
     const currentUser = app.state.currentUser;
-    if (!badge || !currentUser) return;
+    const badges = document.querySelectorAll("[data-requests-badge]");
+    if (!badges.length || !currentUser) return;
 
     const count = app.state.swapps.filter(
       (swapp) => swapp.receiver === currentUser.username && swapp.status === "pending",
     ).length;
 
     if (count > 0) {
-      badge.textContent = count;
-      badge.classList.remove("hidden");
+      badges.forEach((badge) => {
+        badge.textContent = count;
+        badge.classList.remove("hidden");
+      });
     } else {
-      badge.classList.add("hidden");
+      badges.forEach((badge) => badge.classList.add("hidden"));
     }
   };
 

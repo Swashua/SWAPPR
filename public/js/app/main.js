@@ -19,6 +19,10 @@
 
   function exposeCompatibilityGlobals() {
     root.handleLogout = app.handleLogout;
+    app.toggleMobileMenu = root.toggleMobileMenu;
+    app.closeMobileMenu = root.closeMobileMenu;
+    root.toggleMobileMenu = app.toggleMobileMenu;
+    root.closeMobileMenu = app.closeMobileMenu;
     root.filterBy = app.filterBy;
     root.openProfilePanel = app.openProfilePanel;
     root.closeProfilePanel = app.closeProfilePanel;

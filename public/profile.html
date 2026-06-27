@@ -394,12 +394,54 @@
         </button>
         <button
           onclick="handleLogout()"
-          class="text-xs font-bold px-3 py-1.5 rounded-full border transition text-purple-700 dark:text-purple-300 border-purple-200 dark:border-white/[0.1] hover:bg-purple-50 dark:hover:bg-white/[0.05]"
+          class="hidden md:inline-flex text-xs font-bold px-3 py-1.5 rounded-full border transition text-purple-700 dark:text-purple-300 border-purple-200 dark:border-white/[0.1] hover:bg-purple-50 dark:hover:bg-white/[0.05]"
         >
           Logout
         </button>
+        <button
+          id="mobileMenuToggle"
+          type="button"
+          onclick="toggleMobileMenu()"
+          class="md:hidden mobile-menu-button border border-purple-200 dark:border-white/[0.1]"
+          aria-label="Open menu"
+          aria-expanded="false"
+          aria-controls="mobileMenu"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
       </div>
     </header>
+
+    <div
+      id="mobileMenuOverlay"
+      class="mobile-menu-overlay"
+      onclick="closeMobileMenu()"
+    ></div>
+    <nav
+      id="mobileMenu"
+      class="mobile-menu"
+      aria-label="Mobile navigation"
+    >
+      <p
+        class="text-xs font-bold uppercase tracking-widest mb-2 px-2 text-purple-300 dark:text-purple-400"
+      >
+        Profile
+      </p>
+      <button
+        onclick="goHome()"
+        class="sidebar-link flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition w-full text-left"
+      >
+        Home
+      </button>
+      <button
+        onclick="handleLogout()"
+        class="mobile-menu-logout sidebar-link flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition w-full text-left"
+      >
+        Logout
+      </button>
+    </nav>
 
     <!-- Content -->
     <div class="max-w-2xl mx-auto px-4 py-6 space-y-3">
@@ -711,6 +753,7 @@
 
     <div id="toast" class="toast"></div>
 
+    <script src="js/mobile-menu.js"></script>
     <script>
       // ── Theme ────────────────────────────────────────────────────────────────
       const savedTheme = localStorage.getItem("theme");
