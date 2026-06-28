@@ -14,7 +14,7 @@
   }
 
   async function get(path) {
-    const response = await fetch(endpoint(path));
+    const response = await fetch(endpoint(path), { credentials: "same-origin" });
     return parseJson(response);
   }
 
@@ -22,6 +22,7 @@
     const response = await fetch(endpoint(path), {
       method,
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify(body),
     });
     return parseJson(response);

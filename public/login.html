@@ -11,6 +11,7 @@
     />
     <link rel="stylesheet" href="css/login_styles.css" />
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="js/auth-storage.js"></script>
   </head>
 
   <body>
@@ -430,9 +431,9 @@
       lucide.createIcons();
 
       // Check if already logged in
-      if (sessionStorage.getItem("currentUser")) {
-        window.location.href = "index.html";
-      }
+      window.SWAPPR?.auth?.getUser().then((user) => {
+        if (user) window.location.replace("index.html");
+      });
 
       // ── OTP box auto-advance ──────────────────────────────────────────────
       document.addEventListener("DOMContentLoaded", () => {
@@ -562,16 +563,17 @@
           const rRes = await fetch("/api/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
             body: JSON.stringify({ ...pendingFormData, email: verifiedEmail }),
           });
           const rData = await rRes.json();
 
           if (rData.success) {
             if (rData.user?.username) {
-              sessionStorage.setItem("currentUser", JSON.stringify(rData.user));
+              window.SWAPPR.auth.setUser(rData.user);
               successEl.textContent = "Account created! Redirecting…";
               successEl.style.display = "block";
-              setTimeout(() => { window.location.href = "index.html"; }, 1000);
+              setTimeout(() => { window.location.replace("index.html"); }, 1000);
             } else {
               successEl.textContent = "Account created! You can now log in.";
               successEl.style.display = "block";
@@ -982,13 +984,14 @@
           const res = await fetch("/api/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
             body: JSON.stringify({ username, password }),
           });
           const data = await res.json();
 
           if (data.success && data.user && data.user.username) {
-            sessionStorage.setItem("currentUser", JSON.stringify(data.user));
-            window.location.href = "index.html";
+            window.SWAPPR.auth.setUser(data.user);
+            window.location.replace("index.html");
           } else {
             errorEl.textContent =
               data.message || "Invalid username or password.";

@@ -33,8 +33,8 @@
     root.likeNotebook = app.likeNotebook;
   }
 
-  app.init = function init() {
-    app.loadUser();
+  app.init = async function init() {
+    await app.loadUser();
     app.loadDepartments();
     app.loadSubjects();
     app.loadNotebooks();

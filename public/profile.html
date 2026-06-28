@@ -753,6 +753,7 @@
 
     <div id="toast" class="toast"></div>
 
+    <script src="js/auth-storage.js"></script>
     <script src="js/mobile-menu.js"></script>
     <script>
       // ── Theme ────────────────────────────────────────────────────────────────
@@ -769,20 +770,10 @@
 
       // ── Auth ─────────────────────────────────────────────────────────────────
       let currentUser = null;
-      try {
-        const _stored = sessionStorage.getItem("currentUser");
-        if (!_stored || _stored === "undefined" || _stored === "null")
-          throw new Error();
-        currentUser = JSON.parse(_stored);
-        if (!currentUser || !currentUser.username) throw new Error();
-      } catch {
-        sessionStorage.removeItem("currentUser");
-        window.location.href = "login.html";
-      }
 
-      function handleLogout() {
-        sessionStorage.removeItem("currentUser");
-        window.location.href = "login.html";
+      async function handleLogout() {
+        await window.SWAPPR.auth.clearUser();
+        window.location.replace("login.html");
       }
       function goHome() {
         window.location.href = "index.html";
@@ -796,17 +787,33 @@
         setTimeout(() => t.classList.remove("show"), 2800);
       }
 
+      function escapeHtml(value) {
+        return String(value ?? "").replace(
+          /[&<>"']/g,
+          (ch) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[ch],
+        );
+      }
+
       // ── Whose profile? ────────────────────────────────────────────────────────
       const params = new URLSearchParams(window.location.search);
-      const viewUser = params.get("user") || currentUser.username;
-      const isOwn = viewUser === currentUser.username;
+      let viewUser = "";
+      let isOwn = false;
 
       // ── Load ──────────────────────────────────────────────────────────────────
       let profileData = null;
 
       async function loadProfile() {
         try {
-          const res = await fetch(`/api/profile/${viewUser}`);
+          const res = await fetch(`/api/profile/${viewUser}`, {
+            credentials: "same-origin",
+          });
           const data = await res.json();
           if (!data.success) {
             showToast("Profile not found.", "red");
@@ -886,7 +893,7 @@
 
         document.getElementById("strengthsList").innerHTML = allStrengths.length
           ? allStrengths
-              .map((s) => `<span class="skill-pill pill-strength">${s}</span>`)
+              .map((s) => `<span class="skill-pill pill-strength">${escapeHtml(s)}</span>`)
               .join("")
           : `<p class="empty-state">No strengths listed yet.</p>`;
 
@@ -894,7 +901,7 @@
           allWeaknesses.length
             ? allWeaknesses
                 .map(
-                  (w) => `<span class="skill-pill pill-weakness">${w}</span>`,
+                  (w) => `<span class="skill-pill pill-weakness">${escapeHtml(w)}</span>`,
                 )
                 .join("")
             : `<p class="empty-state">No learning goals listed yet.</p>`;
@@ -913,8 +920,8 @@
             <div class="notebook-item">
               <div class="flex items-start justify-between gap-2">
                 <div class="flex-1 min-w-0">
-                  <p class="notebook-title">${n.title}</p>
-                  <p class="notebook-dept">${n.department || "No department"}</p>
+                  <p class="notebook-title">${escapeHtml(n.title)}</p>
+                  <p class="notebook-dept">${escapeHtml(n.department || "No department")}</p>
                 </div>
                 ${
                   isOwn
@@ -935,7 +942,7 @@
                     ${(n.strengths || n.topics || [])
                       .map(
                         (s) =>
-                          `<span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">${s}</span>`,
+                          `<span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">${escapeHtml(s)}</span>`,
                       )
                       .join("")}
                   </div>
@@ -951,7 +958,7 @@
                     ${(n.weaknesses || [])
                       .map(
                         (w) =>
-                          `<span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">${w}</span>`,
+                          `<span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">${escapeHtml(w)}</span>`,
                       )
                       .join("")}
                   </div>
@@ -978,10 +985,10 @@
           matchesList.innerHTML = p.matches
             .map(
               (u) => `
-            <a href="profile.html?user=${u}" class="match-pill">
-              <div class="match-avatar-sm">${u.slice(0, 2).toUpperCase()}</div>
+            <a href="profile.html?user=${encodeURIComponent(u)}" class="match-pill">
+              <div class="match-avatar-sm">${escapeHtml(u.slice(0, 2).toUpperCase())}</div>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold text-purple-900 dark:text-purple-100 truncate">@${u}</p>
+                <p class="text-sm font-bold text-purple-900 dark:text-purple-100 truncate">@${escapeHtml(u)}</p>
                 <p class="text-xs text-purple-400">SWAPP match</p>
               </div>
               <span class="text-xs text-emerald-500 font-bold shrink-0">✅ Matched</span>
@@ -1018,8 +1025,8 @@
           const res = await fetch("/api/profile", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
             body: JSON.stringify({
-              username: currentUser.username,
               name,
               course,
               bio,
@@ -1030,7 +1037,7 @@
           const data = await res.json();
           if (data.success) {
             const updated = { ...currentUser, ...data.user };
-            sessionStorage.setItem("currentUser", JSON.stringify(updated));
+            window.SWAPPR.auth.setUser(updated);
             profileData = { ...profileData, ...data.user };
             renderProfile(profileData);
             document.getElementById("editModal").classList.remove("open");
@@ -1055,6 +1062,7 @@
           const res = await fetch("/api/portfolios/delete", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
             body: JSON.stringify({ id: notebookId }),
           });
           const data = await res.json();
@@ -1068,7 +1076,22 @@
       }
 
       // ── Init ──────────────────────────────────────────────────────────────────
-      loadProfile();
+      async function initProfile() {
+        try {
+          currentUser = await window.SWAPPR.auth.getUser();
+          if (!currentUser) throw new Error();
+        } catch {
+          await window.SWAPPR.auth.clearUser();
+          window.location.replace("login.html");
+          return;
+        }
+
+        viewUser = params.get("user") || currentUser.username;
+        isOwn = viewUser === currentUser.username;
+        loadProfile();
+      }
+
+      initProfile();
     </script>
   </body>
 </html>

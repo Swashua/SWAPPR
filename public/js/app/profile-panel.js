@@ -81,11 +81,21 @@
     const matchList = document.getElementById("profileMatchList");
     if (!matchList) return;
 
-    matchList.innerHTML = profile.matches?.length
-      ? profile.matches
-          .map((username) => `<div class="text-xs text-purple-400">@${username}</div>`)
-          .join("")
-      : `<p class="text-xs text-purple-300">No matches yet.</p>`;
+    matchList.innerHTML = "";
+    if (!profile.matches?.length) {
+      const empty = document.createElement("p");
+      empty.className = "text-xs text-purple-300";
+      empty.textContent = "No matches yet.";
+      matchList.appendChild(empty);
+      return;
+    }
+
+    profile.matches.forEach((username) => {
+      const div = document.createElement("div");
+      div.className = "text-xs text-purple-400";
+      div.textContent = `@${username}`;
+      matchList.appendChild(div);
+    });
   }
 
   app.closeProfilePanel = function closeProfilePanel() {

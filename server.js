@@ -20,6 +20,9 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
 const HASH_PREFIX = "scrypt";
+const SESSION_COOKIE = "swappr_session";
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const sessions = new Map();
 
 function normalizeEmail(email) {
   return String(email || "")
@@ -51,6 +54,78 @@ function verifyPassword(password, storedPassword) {
     Buffer.from(expectedHash, "hex"),
     Buffer.from(actualHash, "hex"),
   );
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    course: user.course || "",
+  };
+}
+
+function parseCookies(header = "") {
+  return Object.fromEntries(
+    header
+      .split(";")
+      .map((part) => part.trim().split("="))
+      .filter(([key, value]) => key && value)
+      .map(([key, value]) => [key, decodeURIComponent(value)]),
+  );
+}
+
+function setSessionCookie(res, token, maxAgeMs = SESSION_TTL_MS) {
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: maxAgeMs,
+    path: "/",
+  });
+}
+
+function startSession(res, user) {
+  const token = crypto.randomBytes(32).toString("hex");
+  sessions.set(token, {
+    user: publicUser(user),
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  });
+  setSessionCookie(res, token);
+}
+
+function clearSession(req, res) {
+  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  if (token) sessions.delete(token);
+  res.clearCookie(SESSION_COOKIE, { path: "/" });
+}
+
+function sessionMiddleware(req, res, next) {
+  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  const session = token && sessions.get(token);
+
+  if (session && session.expiresAt > Date.now()) {
+    session.expiresAt = Date.now() + SESSION_TTL_MS;
+    req.currentUser = session.user;
+    setSessionCookie(res, token);
+  } else if (token) {
+    sessions.delete(token);
+    res.clearCookie(SESSION_COOKIE, { path: "/" });
+  }
+
+  next();
+}
+
+function requireAuth(req, res, next) {
+  if (!req.currentUser) {
+    return res.status(401).json({ success: false, message: "Login required" });
+  }
+  next();
+}
+
+function requirePageAuth(req, res, next) {
+  if (!req.currentUser) return res.redirect("/login.html");
+  next();
 }
 
 function createMailTransport() {
@@ -98,8 +173,23 @@ const mailFromAddress =
   process.env.GMAIL_USER ||
   "";
 
-app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
+app.use(sessionMiddleware);
+
+app.get(["/", "/index.html"], requirePageAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.get("/profile.html", requirePageAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "profile.html"));
+});
+
+app.get("/login.html", (req, res) => {
+  if (req.currentUser) return res.redirect("/index.html");
+  res.sendFile(path.join(__dirname, "public", "login.html"));
+});
+
+app.use(express.static(path.join(__dirname, "public")));
 
 const db = new sqlite3.Database("./sql/swappr.db", (err) => {
   if (err) return console.error(err.message);
@@ -463,16 +553,22 @@ app.post("/api/register", async (req, res) => {
       () => {},
     );
 
+    startSession(res, {
+      id: result.lastID,
+      username,
+      name,
+      course: finalCourse,
+    });
+
     res.status(201).json({
       success: true,
       userId: result.lastID,
-      user: {
+      user: publicUser({
         id: result.lastID,
         name,
         username,
         course: finalCourse,
-        studentId,
-      },
+      }),
     });
   } catch (err) {
     console.error("[REGISTER] Insert error:", err);
@@ -507,19 +603,25 @@ app.post("/api/login", (req, res) => {
       );
     }
 
+    startSession(res, user);
+
     res.json({
       success: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        course: user.course || "",
-      },
+      user: publicUser(user),
     });
   });
 });
 
-app.get("/api/profile/:username", (req, res) => {
+app.get("/api/me", requireAuth, (req, res) => {
+  res.json({ success: true, user: req.currentUser });
+});
+
+app.post("/api/logout", (req, res) => {
+  clearSession(req, res);
+  res.json({ success: true });
+});
+
+app.get("/api/profile/:username", requireAuth, (req, res) => {
   db.get(
     `SELECT * FROM Users WHERE username=?`,
     [req.params.username],
@@ -575,15 +677,17 @@ app.get("/api/profile/:username", (req, res) => {
   );
 });
 
-app.patch("/api/profile", (req, res) => {
-  const { username, name, bio, course, department, yearLevel } = req.body;
+app.patch("/api/profile", requireAuth, (req, res) => {
+  const { name, bio, course, department, yearLevel } = req.body;
   const dept = department || course || "";
   const crs = course || department || "";
   db.run(
     `UPDATE Users SET name=?, bio=?, course=?, department=?, yearLevel=? WHERE username=?`,
-    [name, bio, crs, dept, yearLevel, username],
+    [name, bio, crs, dept, yearLevel, req.currentUser.username],
     function onUpdate(err) {
       if (err) return res.json({ success: false, message: err.message });
+      req.currentUser.name = name;
+      req.currentUser.course = crs;
       res.json({
         success: true,
         user: { name, bio, course: crs, department: dept, yearLevel },
@@ -651,21 +755,21 @@ const NB_SELECT = `
       GROUP BY Notebooks.id
       `;
 
-app.get("/api/portfolios", (req, res) => {
+app.get("/api/portfolios", requireAuth, (req, res) => {
   db.all(`${NB_SELECT} ORDER BY Notebooks.created_at DESC`, [], (err, rows) => {
     if (err) return res.json({ success: false, message: err.message });
     res.json({ portfolios: rows || [] });
   });
 });
 
-app.get("/api/portfolios/top", (req, res) => {
+app.get("/api/portfolios/top", requireAuth, (req, res) => {
   db.all(`${NB_SELECT} ORDER BY likes DESC LIMIT 5`, [], (err, rows) => {
     if (err) return res.json({ success: false, message: err.message });
     res.json({ portfolios: rows || [] });
   });
 });
 
-app.get("/api/portfolios/recent", (req, res) => {
+app.get("/api/portfolios/recent", requireAuth, (req, res) => {
   db.all(
     `${NB_SELECT} ORDER BY Notebooks.created_at DESC LIMIT 5`,
     [],
@@ -676,7 +780,7 @@ app.get("/api/portfolios/recent", (req, res) => {
   );
 });
 
-app.post("/api/portfolios", (req, res) => {
+app.post("/api/portfolios", requireAuth, (req, res) => {
   console.log("[CREATE NOTEBOOK]", req.body);
 
   const {
@@ -684,11 +788,9 @@ app.post("/api/portfolios", (req, res) => {
     description,
     department,
     courseCode,
-    author,
-    username,
     fileUrl,
   } = req.body;
-  const actualAuthor = author || username;
+  const actualAuthor = req.currentUser.username;
 
   if (!title || !actualAuthor) {
     return res.status(400).json({
@@ -740,10 +842,11 @@ app.post("/api/portfolios", (req, res) => {
   );
 });
 
-app.put("/api/portfolios/:id", (req, res) => {
+app.put("/api/portfolios/:id", requireAuth, (req, res) => {
   const { title, description, department, courseCode, fileUrl } = req.body;
   db.run(
-    `UPDATE Notebooks SET title=?, description=?, department=?, course_code=?, file_url=? WHERE id=?`,
+    `UPDATE Notebooks SET title=?, description=?, department=?, course_code=?, file_url=?
+     WHERE id=? AND author_id=?`,
     [
       title,
       description || null,
@@ -751,26 +854,41 @@ app.put("/api/portfolios/:id", (req, res) => {
       courseCode || null,
       fileUrl || null,
       req.params.id,
+      req.currentUser.id,
     ],
-    (err) => {
+    function onUpdate(err) {
       if (err) return res.json({ success: false, message: err.message });
+      if (!this.changes) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Notebook not found" });
+      }
       res.json({ success: true });
     },
   );
 });
 
-app.post("/api/portfolios/delete", (req, res) => {
-  const { id, title, author } = req.body;
+app.post("/api/portfolios/delete", requireAuth, (req, res) => {
+  const { id, title } = req.body;
   if (id) {
-    db.run(`DELETE FROM Notebooks WHERE id=?`, [id], (err) => {
-      if (err) return res.json({ success: false, message: err.message });
-      res.json({ success: true });
-    });
-  } else if (title && author) {
+    db.run(
+      `DELETE FROM Notebooks WHERE id=? AND author_id=?`,
+      [id, req.currentUser.id],
+      function onDelete(err) {
+        if (err) return res.json({ success: false, message: err.message });
+        if (!this.changes) {
+          return res
+            .status(404)
+            .json({ success: false, message: "Notebook not found" });
+        }
+        res.json({ success: true });
+      },
+    );
+  } else if (title) {
     db.get(
       `SELECT Notebooks.id FROM Notebooks JOIN Users ON Notebooks.author_id=Users.id
 WHERE Notebooks.title=? AND Users.username=?`,
-      [title, author],
+      [title, req.currentUser.username],
       (err, row) => {
         if (err || !row) {
           return res.json({ success: false, message: "Notebook not found" });
@@ -788,42 +906,47 @@ WHERE Notebooks.title=? AND Users.username=?`,
   }
 });
 
-app.post("/api/portfolios/like", (req, res) => {
-  const { username, notebookId } = req.body;
-  db.get(`SELECT id FROM Users WHERE username=?`, [username], (err, user) => {
-    if (!user) return res.json({ success: false });
-    db.run(
-      `INSERT INTO Likes (user_id, notebook_id) VALUES (?,?)`,
-      [user.id, notebookId],
-      (likeErr) => {
-        if (likeErr) {
-          return res.json({ success: false, message: "Already liked" });
-        }
-        res.json({ success: true });
-      },
-    );
-  });
+app.post("/api/portfolios/like", requireAuth, (req, res) => {
+  const { notebookId } = req.body;
+  db.run(
+    `INSERT INTO Likes (user_id, notebook_id) VALUES (?,?)`,
+    [req.currentUser.id, notebookId],
+    (likeErr) => {
+      if (likeErr) {
+        return res.json({ success: false, message: "Already liked" });
+      }
+      res.json({ success: true });
+    },
+  );
 });
 
-app.post("/api/swapps", (req, res) => {
-  const { from, to } = req.body;
-  db.get(`SELECT id FROM Users WHERE username=?`, [from], (err, sender) => {
-    db.get(
-      `SELECT id FROM Users WHERE username=?`,
-      [to],
-      (receiverErr, receiver) => {
-        if (!sender || !receiver) return res.json({ success: false });
-        db.run(
-          `INSERT INTO Swapps (sender_id, receiver_id, status) VALUES (?,?,'pending')`,
-          [sender.id, receiver.id],
-          () => res.json({ success: true }),
-        );
-      },
-    );
-  });
+app.post("/api/swapps", requireAuth, (req, res) => {
+  const { to } = req.body;
+  db.get(
+    `SELECT id FROM Users WHERE username=?`,
+    [req.currentUser.username],
+    (err, sender) => {
+      db.get(
+        `SELECT id FROM Users WHERE username=?`,
+        [to],
+        (receiverErr, receiver) => {
+          if (!sender || !receiver) return res.json({ success: false });
+          db.run(
+            `INSERT INTO Swapps (sender_id, receiver_id, status) VALUES (?,?,'pending')`,
+            [sender.id, receiver.id],
+            () => res.json({ success: true }),
+          );
+        },
+      );
+    },
+  );
 });
 
-app.get("/api/swapps/:username", (req, res) => {
+app.get("/api/swapps/:username", requireAuth, (req, res) => {
+  if (req.params.username !== req.currentUser.username) {
+    return res.status(403).json({ success: false, message: "Forbidden" });
+  }
+
   db.get(
     `SELECT id FROM Users WHERE username=?`,
     [req.params.username],
@@ -847,12 +970,17 @@ WHERE sender_id=? OR receiver_id=?`,
   );
 });
 
-app.put("/api/swapps/:id/respond", (req, res) => {
+app.put("/api/swapps/:id/respond", requireAuth, (req, res) => {
   db.run(
-    `UPDATE Swapps SET status=? WHERE id=?`,
-    [req.body.status, req.params.id],
-    (err) => {
+    `UPDATE Swapps SET status=? WHERE id=? AND receiver_id=?`,
+    [req.body.status, req.params.id, req.currentUser.id],
+    function onRespond(err) {
       if (err) return res.json({ success: false, message: err.message });
+      if (!this.changes) {
+        return res
+          .status(404)
+          .json({ success: false, message: "SWAPP not found" });
+      }
       res.json({ success: true });
     },
   );

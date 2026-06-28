@@ -1,15 +1,9 @@
 (function (root) {
   const app = (root.SWAPPR = root.SWAPPR || {});
+  const auth = app.auth;
 
-  app.loadUser = function loadUser() {
-    const stored = sessionStorage.getItem("currentUser");
-    if (stored && stored !== "undefined" && stored !== "null") {
-      try {
-        app.state.currentUser = JSON.parse(stored);
-      } catch {
-        app.state.currentUser = null;
-      }
-    }
+  app.loadUser = async function loadUser() {
+    app.state.currentUser = (await auth?.getUser()) || null;
 
     const currentUser = app.state.currentUser;
     if (currentUser && currentUser.username) {
@@ -21,11 +15,11 @@
       return;
     }
 
-    window.location.href = "login.html";
+    window.location.replace("login.html");
   };
 
-  app.handleLogout = function handleLogout() {
-    sessionStorage.removeItem("currentUser");
-    window.location.href = "login.html";
+  app.handleLogout = async function handleLogout() {
+    await auth?.clearUser();
+    window.location.replace("login.html");
   };
 })(window);

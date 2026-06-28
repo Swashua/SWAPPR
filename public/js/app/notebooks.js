@@ -5,6 +5,20 @@
     return document.getElementById("searchInput")?.value?.toLowerCase() || "";
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "").replace(
+      /[&<>"']/g,
+      (ch) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[ch],
+    );
+  }
+
   function updateSectionTitle() {
     const sectionTitle = document.getElementById("sectionTitle");
     const sectionSubtitle = document.getElementById("sectionSubtitle");
@@ -197,8 +211,8 @@
       : "No description provided";
 
     const wordCount = notebook.wordCount || Math.floor(Math.random() * 12000) + 2000;
-    const subjectLabel = notebook.department || notebook.course || "General";
-    const trustScore = notebook.trustScore || 98;
+    const subjectLabel = escapeHtml(notebook.department || notebook.course || "General");
+    const trustScore = escapeHtml(notebook.trustScore || 98);
     const levelTag =
       notebook.level ||
       (wordCount > 15000
@@ -208,14 +222,19 @@
           : wordCount > 4000
             ? "STANDARD"
             : "QUICK REVIEW");
+    const title = escapeHtml(notebook.title || "Untitled Notebook");
+    const username = escapeHtml(notebook.username || "anonymous");
+    const description = escapeHtml(displayDesc);
+    const levelTagText = escapeHtml(levelTag);
+    const wordCountText = escapeHtml(wordCount.toLocaleString());
 
     card.className = "notebook-card fade-in";
     card.innerHTML = `
       <div class="card-top">
         <div>
-          <h3 class="card-title">${notebook.title || "Untitled Notebook"}</h3>
-          <p class="card-username">by @${notebook.username || "anonymous"}</p>
-          <p class="card-description">${displayDesc}</p>
+          <h3 class="card-title">${title}</h3>
+          <p class="card-username">by @${username}</p>
+          <p class="card-description">${description}</p>
         </div>
       </div>
 
@@ -224,28 +243,28 @@
       </div>
 
       <div class="card-badge-row">
-        <span class="card-badge">${levelTag}</span>
+        <span class="card-badge">${levelTagText}</span>
       </div>
 
       <div class="metadata-dashboard">
         <div class="meta-pill">
           <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
-          ${wordCount.toLocaleString()} words
+          ${wordCountText} words
         </div>
         <div class="meta-pill">
           <i data-lucide="image" class="w-3.5 h-3.5"></i>
-          ${notebook.imageCount || 18} diagrams
+          ${escapeHtml(notebook.imageCount || 18)} diagrams
         </div>
         <div class="meta-pill">
           <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
-          ${notebook.pageCount || 72} pages
+          ${escapeHtml(notebook.pageCount || 72)} pages
         </div>
       </div>
 
       <div class="meta-bottom-row">
         <div class="read-time">
           <i data-lucide="clock" class="w-3.5 h-3.5"></i>
-          ${notebook.readTime || 48} min read
+          ${escapeHtml(notebook.readTime || 48)} min read
         </div>
         <div class="trust-score">
           <i data-lucide="shield-check" class="w-4 h-4"></i>
